@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+python-multipart
+pymupdf
+openpyxl
+python-docx
+reportlab
+requests
+httpx

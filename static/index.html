@@ -1,0 +1,1772 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PortCall Docs</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.3/dist/cdn.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #F8FAFC;
+      color: #0F172A;
+      -webkit-font-smoothing: antialiased;
+    }
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    [x-cloak] {
+      display: none !important;
+    }
+    .enterprise-border {
+      border: 1px solid #E2E8F0;
+    }
+    .dropzone-hover {
+      border-color: #0F172A !important;
+      background-color: #F1F5F9 !important;
+    }
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #CBD5E1;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94A3B8;
+    }
+  </style>
+</head>
+<body x-data="portCallApp()" class="min-h-screen flex flex-col bg-[#F8FAFC] text-slate-900">
+
+  <!-- TOAST NOTIFICATION -->
+  <div
+    x-cloak
+    x-show="toast.visible"
+    x-transition.opacity.duration.150ms
+    class="fixed bottom-4 right-4 z-50 max-w-sm bg-slate-900 text-white px-3.5 py-2.5 rounded-lg shadow-lg border border-slate-800 flex items-center gap-2.5 text-xs font-medium"
+  >
+    <span
+      class="w-2 h-2 rounded-full shrink-0"
+      :class="{
+        'bg-[#10B981]': toast.type === 'success',
+        'bg-[#F59E0B]': toast.type === 'warning',
+        'bg-[#EF4444]': toast.type === 'error',
+        'bg-slate-400': toast.type === 'info'
+      }"
+    ></span>
+    <span class="flex-1 leading-snug" x-text="toast.message"></span>
+    <button type="button" @click="toast.visible = false" class="text-slate-400 hover:text-white ml-1">✕</button>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- VIEW 1: LOGIN SCREEN                                                      -->
+  <!-- ========================================================================= -->
+  <div
+    x-cloak
+    x-show="authChecked && !currentUser"
+    class="fixed inset-0 z-40 flex items-center justify-center p-4 bg-[#F8FAFC] overflow-y-auto"
+  >
+    <div class="w-full max-w-[400px] bg-white rounded-xl enterprise-border shadow-sm p-6 sm:p-7">
+      <!-- Brand Header -->
+      <div class="flex items-center gap-3 mb-6">
+        <div class="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-mono-code text-xs font-bold shadow-sm">
+          PC
+        </div>
+        <div>
+          <h1 class="text-base font-semibold text-slate-900 tracking-tight">PortCall Docs</h1>
+          <p class="text-xs text-slate-500">Đăng nhập hệ thống quản lý chứng từ tàu</p>
+        </div>
+      </div>
+
+      <!-- Login Form -->
+      <form @submit.prevent="submitLogin()" class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-700 mb-1.5">Tên đăng nhập</label>
+          <input
+            type="text"
+            x-model="loginForm.username"
+            required
+            autocomplete="username"
+            placeholder="admin, ops_kien hoặc viewer"
+            class="w-full h-9 px-3 rounded-lg enterprise-border text-xs font-mono-code text-slate-900 bg-white focus:outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 transition"
+          />
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="block text-xs font-medium text-slate-700">Mật khẩu</label>
+            <button
+              type="button"
+              @click="showPassword = !showPassword"
+              class="text-[11px] text-slate-400 hover:text-slate-700 transition"
+              x-text="showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'"
+            ></button>
+          </div>
+          <input
+            :type="showPassword ? 'text' : 'password'"
+            x-model="loginForm.password"
+            required
+            autocomplete="current-password"
+            placeholder="Nhập mật khẩu"
+            class="w-full h-9 px-3 rounded-lg enterprise-border text-xs font-mono-code text-slate-900 bg-white focus:outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 transition"
+          />
+        </div>
+
+        <div
+          x-show="loginError"
+          class="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 flex items-center gap-2"
+        >
+          <span class="w-1.5 h-1.5 rounded-full bg-[#EF4444] shrink-0"></span>
+          <span x-text="loginError"></span>
+        </div>
+
+        <button
+          type="submit"
+          :disabled="isLoading"
+          class="w-full h-9 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white text-xs font-medium shadow-sm transition flex items-center justify-center"
+        >
+          <span x-show="!isLoading">Đăng nhập</span>
+          <span x-show="isLoading" class="font-mono-code">Đang xác thực...</span>
+        </button>
+      </form>
+
+      <!-- Quick-fill Demo Accounts (1-Click) -->
+      <div class="mt-6 pt-5 border-t border-[#E2E8F0]">
+        <div class="flex items-center justify-between mb-2.5">
+          <span class="text-[11px] font-medium text-slate-500">Tài khoản Demo (Bấm để đăng nhập 1-Click):</span>
+        </div>
+
+        <div class="space-y-1.5">
+          <button
+            type="button"
+            @click="quickLogin('admin', 'Admin@123')"
+            class="w-full px-3 py-2 rounded-lg enterprise-border hover:border-slate-400 hover:bg-slate-50 flex items-center justify-between text-left transition"
+          >
+            <div>
+              <div class="text-xs font-semibold text-slate-900">Quản trị viên (Full Access)</div>
+              <div class="text-[11px] font-mono-code text-slate-500">admin / Admin@123</div>
+            </div>
+            <span class="px-2 py-0.5 rounded text-[10px] font-mono-code font-semibold bg-slate-900 text-white">ADMIN</span>
+          </button>
+
+          <button
+            type="button"
+            @click="quickLogin('ops_kien', 'Ops@123')"
+            class="w-full px-3 py-2 rounded-lg enterprise-border hover:border-slate-400 hover:bg-slate-50 flex items-center justify-between text-left transition"
+          >
+            <div>
+              <div class="text-xs font-semibold text-slate-900">Chuyên viên Chứng từ</div>
+              <div class="text-[11px] font-mono-code text-slate-500">ops_kien / Ops@123</div>
+            </div>
+            <span class="px-2 py-0.5 rounded text-[10px] font-mono-code font-semibold bg-blue-50 text-blue-700 border border-blue-200">OPS</span>
+          </button>
+
+          <button
+            type="button"
+            @click="quickLogin('viewer', 'View@123')"
+            class="w-full px-3 py-2 rounded-lg enterprise-border hover:border-slate-400 hover:bg-slate-50 flex items-center justify-between text-left transition"
+          >
+            <div>
+              <div class="text-xs font-semibold text-slate-900">Ban Giám đốc / Cảng vụ (Chỉ xem)</div>
+              <div class="text-[11px] font-mono-code text-slate-500">viewer / View@123</div>
+            </div>
+            <span class="px-2 py-0.5 rounded text-[10px] font-mono-code font-semibold bg-slate-100 text-slate-600 border border-slate-200">VIEWER</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- AUTHENTICATED SHELL (TOP BAR 48PX + 3 VIEWS)                              -->
+  <!-- ========================================================================= -->
+  <div x-cloak x-show="authChecked && currentUser" class="flex-1 flex flex-col min-h-screen">
+
+    <!-- TOP NAVIGATION BAR (48px) -->
+    <header class="h-12 bg-white border-b border-[#E2E8F0] px-4 flex items-center justify-between sticky top-0 z-30">
+      <!-- Left: Brand + View Tabs -->
+      <div class="flex items-center gap-5">
+        <div class="flex items-center gap-2">
+          <div class="w-6 h-6 rounded bg-slate-900 text-white flex items-center justify-center font-mono-code text-[11px] font-bold">
+            PC
+          </div>
+          <span class="text-sm font-semibold tracking-tight text-slate-900">PortCall Docs</span>
+        </div>
+
+        <nav class="flex items-center gap-1">
+          <button
+            type="button"
+            @click="switchTab('vessels')"
+            class="px-2.5 py-1 rounded-md text-xs font-medium transition"
+            :class="activeTab === 'vessels' ? 'bg-slate-100 text-slate-900 font-semibold' : 'text-slate-500 hover:text-slate-900'"
+          >
+            Lịch Tàu
+          </button>
+          <button
+            type="button"
+            x-show="currentUser && currentUser.role === 'ADMIN'"
+            @click="switchTab('users')"
+            class="px-2.5 py-1 rounded-md text-xs font-medium transition"
+            :class="activeTab === 'users' ? 'bg-slate-100 text-slate-900 font-semibold' : 'text-slate-500 hover:text-slate-900'"
+          >
+            Quản lý User & Cloud
+          </button>
+          <button
+            type="button"
+            x-show="currentUser && currentUser.role === 'ADMIN'"
+            @click="switchTab('audit')"
+            class="px-2.5 py-1 rounded-md text-xs font-medium transition"
+            :class="activeTab === 'audit' ? 'bg-slate-100 text-slate-900 font-semibold' : 'text-slate-500 hover:text-slate-900'"
+          >
+            Audit Logs
+          </button>
+        </nav>
+
+        <!-- Storage Mode Indicator (Google Drive Cloud vs Local Hybrid) -->
+        <div
+          class="hidden lg:flex items-center gap-1.5 px-2 py-0.5 rounded-md enterprise-border bg-[#F8FAFC] text-[11px] font-mono-code"
+          :title="gdriveStatus.enabled ? ('Đồng bộ Google Drive: ' + (gdriveStatus.last_sync_at || 'Sẵn sàng')) : 'Chế độ ổ cứng cục bộ (Hybrid Local)'"
+        >
+          <span
+            class="w-1.5 h-1.5 rounded-full"
+            :class="gdriveStatus.enabled ? 'bg-[#10B981]' : 'bg-slate-400'"
+          ></span>
+          <span
+            class="text-slate-600"
+            x-text="gdriveStatus.enabled ? 'GDrive Cloud' : 'Local Storage'"
+          ></span>
+        </div>
+      </div>
+
+      <!-- Right: Quick Filter + Action Buttons + User Profile -->
+      <div class="flex items-center gap-2.5">
+        <!-- Quick Status Filter -->
+        <div x-show="activeTab === 'vessels'" class="hidden md:flex items-center bg-slate-100 p-0.5 rounded-lg text-xs">
+          <button
+            type="button"
+            @click="filterColor = 'ALL'"
+            class="px-2 py-1 rounded-md transition"
+            :class="filterColor === 'ALL' ? 'bg-white text-slate-900 font-medium shadow-sm' : 'text-slate-500 hover:text-slate-800'"
+          >
+            Tất cả <span class="font-mono-code text-[11px] ml-0.5 text-slate-400" x-text="stats.total"></span>
+          </button>
+          <button
+            type="button"
+            @click="filterColor = 'RED'"
+            class="px-2 py-1 rounded-md transition flex items-center gap-1.5"
+            :class="filterColor === 'RED' ? 'bg-white text-slate-900 font-medium shadow-sm' : 'text-slate-500 hover:text-slate-800'"
+          >
+            <span class="w-2 h-2 rounded-full bg-[#EF4444]"></span>
+            <span>Cần xử lý</span>
+            <span class="font-mono-code text-[11px] text-slate-400" x-text="stats.red"></span>
+          </button>
+          <button
+            type="button"
+            @click="filterColor = 'ORANGE'"
+            class="px-2 py-1 rounded-md transition flex items-center gap-1.5"
+            :class="filterColor === 'ORANGE' ? 'bg-white text-slate-900 font-medium shadow-sm' : 'text-slate-500 hover:text-slate-800'"
+          >
+            <span class="w-2 h-2 rounded-full bg-[#F59E0B]"></span>
+            <span>Thiếu chứng từ</span>
+            <span class="font-mono-code text-[11px] text-slate-400" x-text="stats.orange"></span>
+          </button>
+          <button
+            type="button"
+            @click="filterColor = 'GREEN'"
+            class="px-2 py-1 rounded-md transition flex items-center gap-1.5"
+            :class="filterColor === 'GREEN' ? 'bg-white text-slate-900 font-medium shadow-sm' : 'text-slate-500 hover:text-slate-800'"
+          >
+            <span class="w-2 h-2 rounded-full bg-[#10B981]"></span>
+            <span>Đủ hồ sơ</span>
+            <span class="font-mono-code text-[11px] text-slate-400" x-text="stats.green"></span>
+          </button>
+        </div>
+
+        <!-- + Tạo tàu (Only ADMIN & OPS) -->
+        <button
+          type="button"
+          x-show="canEdit() && activeTab === 'vessels'"
+          @click="openBatchCreateModal()"
+          class="h-7 px-2.5 rounded-md bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium transition flex items-center gap-1"
+        >
+          <span>+ Tạo tàu</span>
+        </button>
+
+        <!-- Nạp File Demo Secondary Dropdown Menu (Only ADMIN & OPS) -->
+        <div x-show="canEdit() && activeTab === 'vessels'" class="relative" @click.away="showDemoMenu = false">
+          <button
+            type="button"
+            @click="showDemoMenu = !showDemoMenu"
+            class="h-7 px-2.5 rounded-md bg-white hover:bg-slate-50 text-slate-700 enterprise-border text-xs font-medium transition flex items-center gap-1.5"
+          >
+            <span>Nạp File Demo</span>
+            <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          <!-- Dropdown Menu -->
+          <div
+            x-cloak
+            x-show="showDemoMenu"
+            x-transition.opacity.duration.100ms
+            class="absolute right-0 mt-1.5 w-72 bg-white rounded-xl enterprise-border shadow-lg py-1.5 z-40 text-xs"
+          >
+            <div class="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Kịch bản nhanh (<span x-text="selectedVessel?.vessel_name || 'Chưa chọn tàu'"></span>)
+            </div>
+            <button
+              type="button"
+              @click="runDemoScenario('PARTIAL_ORANGE'); showDemoMenu = false"
+              class="w-full px-3 py-1.5 text-left hover:bg-slate-50 flex items-center gap-2 text-slate-700"
+            >
+              <span class="w-2 h-2 rounded-full bg-[#F59E0B] shrink-0"></span>
+              <span>Nạp Manifest + VGM thiếu (3/5 B/L)</span>
+            </button>
+            <button
+              type="button"
+              @click="runDemoScenario('FULL_GREEN'); showDemoMenu = false"
+              class="w-full px-3 py-1.5 text-left hover:bg-slate-50 flex items-center gap-2 text-slate-700"
+            >
+              <span class="w-2 h-2 rounded-full bg-[#10B981] shrink-0"></span>
+              <span>Nạp đủ 100% bộ hồ sơ (5/5 B/L)</span>
+            </button>
+            <button
+              type="button"
+              @click="runDemoScenario('WRONG_VESSEL_RED'); showDemoMenu = false"
+              class="w-full px-3 py-1.5 text-left hover:bg-slate-50 flex items-center gap-2 text-slate-700"
+            >
+              <span class="w-2 h-2 rounded-full bg-[#EF4444] shrink-0"></span>
+              <span>Nạp file sai tên tàu (MV EVER GIVEN)</span>
+            </button>
+            <button
+              type="button"
+              @click="runDemoScenario('UNCLASSIFIED_TEST'); showDemoMenu = false"
+              class="w-full px-3 py-1.5 text-left hover:bg-slate-50 flex items-center gap-2 text-slate-700"
+            >
+              <span class="w-2 h-2 rounded-full bg-slate-400 shrink-0"></span>
+              <span>Nạp file scan mờ (Test chọn loại 1-Click)</span>
+            </button>
+
+            <div class="my-1 border-t border-[#E2E8F0]"></div>
+            <div class="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Nạp từng file lẻ (.pdf, .xlsx, .docx)
+            </div>
+            <template x-for="s in sampleFiles" :key="s.filename">
+              <button
+                type="button"
+                @click="simulateUploadFiles([s.filename]); showDemoMenu = false"
+                class="w-full px-3 py-1.5 text-left hover:bg-slate-50 flex items-center justify-between gap-2"
+              >
+                <span class="font-mono-code text-[11px] text-slate-800 truncate" x-text="s.filename"></span>
+                <span class="text-[10px] text-slate-400 truncate max-w-[130px]" x-text="s.description"></span>
+              </button>
+            </template>
+
+            <div class="my-1 border-t border-[#E2E8F0]"></div>
+            <button
+              type="button"
+              @click="resetDemoData(); showDemoMenu = false"
+              class="w-full px-3 py-1.5 text-left hover:bg-slate-50 text-slate-500 hover:text-slate-900 font-medium"
+            >
+              Khôi phục dữ liệu mẫu mặc định
+            </button>
+          </div>
+        </div>
+
+        <div class="h-4 w-[1px] bg-[#E2E8F0] mx-0.5"></div>
+
+        <!-- Logged-in User Info + Role Badge + Logout -->
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-medium text-slate-700 hidden sm:inline" x-text="currentUser?.full_name || currentUser?.username"></span>
+          <span
+            class="px-1.5 py-0.5 rounded text-[10px] font-mono-code font-semibold uppercase border"
+            :class="{
+              'bg-slate-900 text-white border-slate-900': currentUser?.role === 'ADMIN',
+              'bg-blue-50 text-blue-700 border-blue-200': currentUser?.role === 'OPS',
+              'bg-slate-100 text-slate-600 border-slate-200': currentUser?.role === 'VIEWER'
+            }"
+            x-text="currentUser?.role"
+          ></span>
+          <button
+            type="button"
+            @click="logout()"
+            class="text-xs text-slate-400 hover:text-slate-900 px-1.5 py-1 rounded transition"
+            title="Đăng xuất"
+          >
+            Đăng xuất
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 2: WORKSPACE KIỂM TRA HỒ SƠ TÀU (SPLIT-PANE LAYOUT)                 -->
+    <!-- ========================================================================= -->
+    <div x-show="activeTab === 'vessels'" class="flex-1 flex overflow-hidden">
+
+      <!-- LEFT PANE: COMPACT VESSEL LIST (WIDTH 320PX - NO VOYAGE CODE) -->
+      <aside class="w-80 shrink-0 bg-white border-r border-[#E2E8F0] flex flex-col h-[calc(100vh-48px)]">
+        <div class="px-3.5 py-2.5 border-b border-[#E2E8F0] flex items-center justify-between">
+          <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Danh sách tàu</span>
+          <span class="font-mono-code text-[11px] text-slate-400" x-text="filteredVessels().length + ' tàu'"></span>
+        </div>
+
+        <div class="flex-1 overflow-y-auto divide-y divide-[#E2E8F0]">
+          <template x-for="vessel in filteredVessels()" :key="vessel.id">
+            <div
+              @click="selectVessel(vessel.id)"
+              @dragover.prevent="if (canEdit()) dragOverVesselId = vessel.id"
+              @dragleave.prevent="if (dragOverVesselId === vessel.id) dragOverVesselId = null"
+              @drop.prevent="if (canEdit()) handleDropOnVesselCard($event, vessel.id)"
+              class="px-3.5 py-3 cursor-pointer transition-colors"
+              :class="[
+                selectedVesselId === vessel.id ? 'bg-slate-100/90' : 'hover:bg-slate-50/80',
+                dragOverVesselId === vessel.id ? 'dropzone-hover' : ''
+              ]"
+            >
+              <!-- Row 1: 8px Status Dot + Vessel Name -->
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span
+                    class="w-2 h-2 rounded-full shrink-0"
+                    :class="{
+                      'bg-[#10B981]': vessel.status_color === 'GREEN',
+                      'bg-[#F59E0B]': vessel.status_color === 'ORANGE',
+                      'bg-[#EF4444]': vessel.status_color === 'RED'
+                    }"
+                  ></span>
+                  <span class="text-xs font-semibold text-slate-900 truncate" x-text="vessel.vessel_name"></span>
+                </div>
+                <span
+                  class="font-mono-code text-[11px] text-slate-600 font-medium shrink-0"
+                  x-text="vessel.completed_checklist_count + '/' + vessel.total_checklist_count"
+                ></span>
+              </div>
+
+              <!-- Row 2: ETA (Mono) + Thin Progress Bar -->
+              <div class="mt-2 flex items-center justify-between gap-3">
+                <span class="font-mono-code text-[11px] text-slate-400" x-text="vessel.eta"></span>
+                <div class="w-20 h-1 bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    class="h-full rounded-full transition-all duration-300"
+                    :class="{
+                      'bg-[#10B981]': vessel.status_color === 'GREEN',
+                      'bg-[#F59E0B]': vessel.status_color === 'ORANGE',
+                      'bg-[#EF4444]': vessel.status_color === 'RED'
+                    }"
+                    :style="'width: ' + vessel.progress_percent + '%'"
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <div x-show="filteredVessels().length === 0" class="p-6 text-center text-xs text-slate-400">
+            Không có tàu nào khớp bộ lọc.
+          </div>
+        </div>
+      </aside>
+
+      <!-- RIGHT PANE: VESSEL DETAIL & DATA TABLE -->
+      <main class="flex-1 overflow-y-auto h-[calc(100vh-48px)] p-6">
+        <div x-show="selectedVessel" class="max-w-5xl mx-auto space-y-4">
+
+          <!-- VESSEL COMPACT HEADER (NO VOYAGE CODE + EXPORT PDF & DOCX BUTTONS) -->
+          <div class="bg-white rounded-xl enterprise-border px-5 py-4 flex flex-wrap items-center justify-between gap-4">
+            <div class="space-y-1">
+              <div class="flex items-center gap-3 flex-wrap">
+                <h2 class="text-base font-bold text-slate-900 tracking-tight" x-text="selectedVessel?.vessel_name"></h2>
+                <span class="text-xs text-slate-500" x-text="selectedVessel?.vessel_type_label"></span>
+                <div class="h-3.5 w-[1px] bg-[#E2E8F0]"></div>
+                <!-- 8px Status Dot + Status Label -->
+                <div class="flex items-center gap-1.5">
+                  <span
+                    class="w-2 h-2 rounded-full"
+                    :class="{
+                      'bg-[#10B981]': selectedVessel?.status_color === 'GREEN',
+                      'bg-[#F59E0B]': selectedVessel?.status_color === 'ORANGE',
+                      'bg-[#EF4444]': selectedVessel?.status_color === 'RED'
+                    }"
+                  ></span>
+                  <span
+                    class="text-xs font-medium"
+                    :class="{
+                      'text-emerald-700': selectedVessel?.status_color === 'GREEN',
+                      'text-amber-700': selectedVessel?.status_color === 'ORANGE',
+                      'text-red-700': selectedVessel?.status_color === 'RED'
+                    }"
+                    x-text="statusLabel(selectedVessel?.status_color)"
+                  ></span>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-4 text-xs text-slate-500">
+                <span>ETA: <strong class="font-mono-code font-medium text-slate-700" x-text="selectedVessel?.eta"></strong></span>
+                <span>Tổng B/L theo Manifest: <strong class="font-mono-code font-medium text-slate-700" x-text="(selectedVessel?.expected_bl_count || 0) + ' B/L'"></strong></span>
+              </div>
+            </div>
+
+            <!-- Header Actions: Drive Folder, Export PDF, Export Word (.docx), Clear, Delete -->
+            <div class="flex flex-wrap items-center gap-2">
+              <a
+                x-show="selectedVessel && selectedVessel.gdrive_folder_url"
+                :href="selectedVessel?.gdrive_folder_url || '#'"
+                target="_blank"
+                rel="noopener"
+                class="h-7 px-2.5 rounded-md enterprise-border bg-emerald-50/70 hover:bg-emerald-50 border-emerald-200 text-xs text-emerald-800 font-medium transition flex items-center gap-1.5"
+                title="Mở thư mục tàu trên Google Drive"
+              >
+                <span class="w-1.5 h-1.5 rounded-full bg-[#10B981]"></span>
+                <span>Folder Drive ↗</span>
+              </a>
+
+              <a
+                x-show="selectedVessel"
+                :href="selectedVessel ? `/api/vessels/${selectedVessel.id}/export/pdf` : '#'"
+                class="h-7 px-2.5 rounded-md enterprise-border bg-white hover:bg-slate-50 text-xs text-slate-700 font-medium transition flex items-center gap-1.5"
+                title="Tải Phiếu Kiểm Tra Hồ Sơ định dạng PDF"
+              >
+                <svg class="w-3.5 h-3.5 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>Xuất PDF</span>
+              </a>
+
+              <a
+                x-show="selectedVessel"
+                :href="selectedVessel ? `/api/vessels/${selectedVessel.id}/export/docx` : '#'"
+                class="h-7 px-2.5 rounded-md enterprise-border bg-white hover:bg-slate-50 text-xs text-slate-700 font-medium transition flex items-center gap-1.5"
+                title="Tải Phiếu Kiểm Tra Hồ Sơ định dạng Word (.docx)"
+              >
+                <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>Xuất Word (.docx)</span>
+              </a>
+
+              <button
+                type="button"
+                x-show="canEdit() && (selectedVessel?.files?.length || 0) > 0"
+                @click="clearVesselFiles(selectedVessel.id)"
+                :disabled="isLoading"
+                class="h-7 px-2.5 rounded-md enterprise-border bg-white hover:bg-slate-50 text-xs text-slate-600 font-medium transition"
+              >
+                Làm trống
+              </button>
+
+              <button
+                type="button"
+                x-show="currentUser && currentUser.role === 'ADMIN'"
+                @click="deleteVessel(selectedVessel.id)"
+                :disabled="isLoading"
+                class="h-7 px-2.5 rounded-md enterprise-border bg-white hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-xs text-slate-500 font-medium transition"
+              >
+                Xóa tàu
+              </button>
+            </div>
+          </div>
+
+          <!-- COMPACT DROPZONE (64PX HEIGHT - SUPPORTS .PDF, .XLSX, .DOCX) -->
+          <div
+            x-show="canEdit()"
+            @dragover.prevent="isDraggingOverMain = true"
+            @dragleave.prevent="isDraggingOverMain = false"
+            @drop.prevent="handleMainDrop($event)"
+            @click="$refs.fileInput.click()"
+            class="h-16 bg-white rounded-xl border border-dashed border-slate-300 hover:border-slate-500 px-4 flex items-center justify-center gap-2.5 cursor-pointer transition"
+            :class="isDraggingOverMain ? 'dropzone-hover' : ''"
+          >
+            <input
+              type="file"
+              x-ref="fileInput"
+              multiple
+              accept=".pdf,.xlsx,.docx"
+              class="hidden"
+              @change="handleFileSelect($event)"
+            />
+            <svg class="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            <span class="text-xs font-medium text-slate-600">
+              Kéo thả chứng từ (<span class="font-mono-code">.pdf</span>, <span class="font-mono-code">.xlsx</span>, <span class="font-mono-code">.docx</span>) hoặc <span class="text-slate-900 underline font-semibold">Chọn file</span>
+            </span>
+          </div>
+
+          <!-- SLIM ALERT BAR FOR WRONG_VESSEL -->
+          <template x-for="errFile in (selectedVessel?.wrong_vessel_files || [])" :key="errFile.id">
+            <div class="bg-red-50/90 border border-red-200 rounded-lg px-3.5 py-2 flex items-center justify-between gap-3 text-xs">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="w-2 h-2 rounded-full bg-[#EF4444] shrink-0"></span>
+                <span class="font-mono-code font-medium text-red-900 truncate" x-text="errFile.original_filename"></span>
+                <span class="text-red-700 truncate" x-text="errFile.error_message"></span>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <a
+                  :href="errFile.download_url"
+                  target="_blank"
+                  class="text-red-700 hover:underline font-mono-code text-[11px]"
+                >Mở file</a>
+                <button
+                  type="button"
+                  x-show="canEdit()"
+                  @click="deleteFile(errFile.id)"
+                  class="px-2 py-0.5 rounded bg-white border border-red-200 text-red-700 hover:bg-red-100 font-medium transition"
+                >
+                  Gỡ file
+                </button>
+              </div>
+            </div>
+          </template>
+
+          <!-- SLIM BAR FOR UNCLASSIFIED FILES (1-CLICK CLASSIFICATION) -->
+          <template x-for="uFile in (selectedVessel?.unclassified_files || [])" :key="uFile.id">
+            <div class="bg-amber-50/90 border border-amber-200 rounded-lg px-3.5 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="w-2 h-2 rounded-full bg-[#F59E0B] shrink-0"></span>
+                <span class="font-mono-code font-medium text-amber-950" x-text="uFile.original_filename"></span>
+                <span class="text-amber-800">Chưa nhận diện được loại chứng từ tự động</span>
+              </div>
+              <div class="flex items-center gap-2 shrink-0" x-show="canEdit()">
+                <select
+                  @change="classifyFileOneClick(uFile.id, $event.target.value)"
+                  class="h-7 px-2 rounded bg-white border border-amber-300 text-xs font-mono-code text-slate-800 focus:outline-none"
+                >
+                  <option value="" selected disabled>Chọn loại chứng từ...</option>
+                  <option value="MANIFEST">MANIFEST</option>
+                  <option value="BL">BL</option>
+                  <option value="VGM">VGM</option>
+                  <option value="CREW_LIST">CREW_LIST</option>
+                  <option value="PORT_CLEARANCE">PORT_CLEARANCE</option>
+                  <option value="STOWAGE_PLAN">STOWAGE_PLAN</option>
+                  <option value="MATES_RECEIPT">MATES_RECEIPT</option>
+                </select>
+                <button
+                  type="button"
+                  @click="deleteFile(uFile.id)"
+                  class="px-2 py-1 rounded bg-white border border-amber-200 text-slate-600 hover:text-red-600 transition"
+                >
+                  Gỡ
+                </button>
+              </div>
+            </div>
+          </template>
+
+          <!-- CHECKLIST DATA TABLE (4 COLUMNS) -->
+          <div class="bg-white rounded-xl enterprise-border overflow-hidden">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="border-b border-[#E2E8F0] bg-[#F8FAFC] text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                  <th class="py-2.5 px-4 w-44">Mã chuẩn</th>
+                  <th class="py-2.5 px-4 w-52">Loại chứng từ</th>
+                  <th class="py-2.5 px-4">Chứng từ đã nộp</th>
+                  <th class="py-2.5 px-4 w-48 text-right">Đối chiếu</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[#E2E8F0] text-xs">
+                <template x-for="item in (selectedVessel?.checklist || [])" :key="item.id">
+                  <tr class="hover:bg-slate-50/60 transition-colors align-top">
+                    <!-- Column 1: [Chấm trạng thái 8px + Mã chuẩn] -->
+                    <td class="py-3 px-4">
+                      <div class="flex items-center gap-2">
+                        <span
+                          class="w-2 h-2 rounded-full shrink-0"
+                          :class="{
+                            'bg-[#10B981]': item.status === 'COMPLETED',
+                            'bg-[#F59E0B]': item.status === 'INCOMPLETE',
+                            'bg-[#EF4444]': item.status === 'MISSING'
+                          }"
+                        ></span>
+                        <span class="font-mono-code font-semibold text-slate-900" x-text="item.doc_type"></span>
+                      </div>
+                    </td>
+
+                    <!-- Column 2: [Tên loại chứng từ] -->
+                    <td class="py-3 px-4 text-slate-700 font-medium" x-text="item.doc_name"></td>
+
+                    <!-- Column 3: [Danh sách file đã tự động đổi tên chuẩn + Người up + Giờ up] -->
+                    <td class="py-3 px-4">
+                      <span x-show="!item.files || item.files.length === 0" class="text-slate-400">—</span>
+
+                      <div class="space-y-1.5" x-show="item.files && item.files.length > 0">
+                        <template x-for="f in item.files" :key="f.id">
+                          <div class="flex items-center justify-between gap-2 group">
+                            <div class="flex items-center gap-2 min-w-0 flex-wrap">
+                              <a
+                                :href="f.download_url"
+                                target="_blank"
+                                class="font-mono-code text-xs font-medium text-slate-900 hover:text-blue-600 hover:underline truncate"
+                                :title="'File gốc: ' + f.original_filename"
+                                x-text="f.stored_filename"
+                              ></a>
+                              <span class="text-[11px] text-slate-400 font-mono-code" x-text="'(' + f.original_filename + ')'"></span>
+                              <span class="text-[11px] text-slate-400">
+                                · <span class="font-mono-code text-slate-500" x-text="f.uploaded_by || 'ops_kien'"></span>
+                                · <span class="font-mono-code" x-text="formatShortTime(f.uploaded_at)"></span>
+                              </span>
+                              <a
+                                x-show="f.gdrive_view_url"
+                                :href="f.gdrive_view_url"
+                                target="_blank"
+                                rel="noopener"
+                                class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono-code text-[10px] hover:bg-emerald-100 transition"
+                                title="Mở file chuẩn hóa trên Google Drive"
+                              >Drive ↗</a>
+                            </div>
+
+                            <div class="flex items-center gap-1.5 opacity-80 group-hover:opacity-100 shrink-0">
+                              <button
+                                type="button"
+                                x-show="canEdit()"
+                                @click="deleteFile(f.id)"
+                                class="text-[11px] text-slate-400 hover:text-red-600 px-1 transition"
+                                title="Gỡ file"
+                              >
+                                Gỡ
+                              </button>
+                            </div>
+                          </div>
+                        </template>
+                      </div>
+                    </td>
+
+                    <!-- Column 4: [Chỉ số đối chiếu: 5/5 B/L] -->
+                    <td class="py-3 px-4 text-right">
+                      <div x-show="item.requires_count_match === 1">
+                        <span
+                          class="font-mono-code font-semibold"
+                          :class="{
+                            'text-emerald-700': item.status === 'COMPLETED',
+                            'text-amber-600': item.status === 'INCOMPLETE',
+                            'text-slate-400': item.status === 'MISSING'
+                          }"
+                          x-text="item.actual_count + '/' + (item.expected_count || 0) + ' B/L'"
+                        ></span>
+                        <div
+                          x-show="item.expected_count > 0 && item.actual_count < item.expected_count"
+                          class="text-[11px] text-amber-600 mt-0.5"
+                          x-text="'Thiếu ' + (item.expected_count - item.actual_count) + ' bộ'"
+                        ></div>
+                      </div>
+
+                      <span
+                        x-show="item.doc_type === 'MANIFEST'"
+                        class="font-mono-code font-medium"
+                        :class="item.status === 'COMPLETED' ? 'text-slate-800' : 'text-slate-400'"
+                        x-text="item.status === 'COMPLETED' ? ((item.expected_count || 0) + ' B/L') : '0 B/L'"
+                      ></span>
+
+                      <span
+                        x-show="item.requires_count_match === 0 && item.doc_type !== 'MANIFEST'"
+                        class="font-mono-code font-medium"
+                        :class="item.status === 'COMPLETED' ? 'text-emerald-700' : 'text-slate-400'"
+                        x-text="item.status === 'COMPLETED' ? '1/1' : '0/1'"
+                      ></span>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </main>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 3A: QUẢN LÝ USER (ADMIN ONLY)                                        -->
+    <!-- ========================================================================= -->
+    <div x-show="activeTab === 'users' && currentUser?.role === 'ADMIN'" class="flex-1 p-6 overflow-y-auto">
+      <div class="max-w-5xl mx-auto space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-bold text-slate-900">Quản lý Tài khoản & Phân quyền (RBAC)</h2>
+            <p class="text-xs text-slate-500">Quản lý danh sách người dùng và cấp quyền truy cập hệ thống</p>
+          </div>
+          <button
+            type="button"
+            @click="showCreateUserModal = true"
+            class="h-8 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium transition"
+          >
+            + Tạo tài khoản
+          </button>
+        </div>
+
+        <div class="bg-white rounded-xl enterprise-border overflow-hidden">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="border-b border-[#E2E8F0] bg-[#F8FAFC] text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                <th class="py-2.5 px-4">Username</th>
+                <th class="py-2.5 px-4">Họ và tên</th>
+                <th class="py-2.5 px-4">Vai trò (Role)</th>
+                <th class="py-2.5 px-4">Trạng thái</th>
+                <th class="py-2.5 px-4">Ngày tạo</th>
+                <th class="py-2.5 px-4 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[#E2E8F0] text-xs">
+              <template x-for="u in usersList" :key="u.id">
+                <tr class="hover:bg-slate-50/60">
+                  <td class="py-3 px-4 font-mono-code font-semibold text-slate-900" x-text="u.username"></td>
+                  <td class="py-3 px-4 text-slate-700" x-text="u.full_name"></td>
+                  <td class="py-3 px-4">
+                    <select
+                      :disabled="u.id === currentUser?.id"
+                      @change="updateUserRole(u.id, $event.target.value)"
+                      class="h-7 px-2 rounded enterprise-border bg-white font-mono-code text-xs font-medium text-slate-800 disabled:opacity-50"
+                    >
+                      <option value="ADMIN" :selected="u.role === 'ADMIN'">ADMIN</option>
+                      <option value="OPS" :selected="u.role === 'OPS'">OPS</option>
+                      <option value="VIEWER" :selected="u.role === 'VIEWER'">VIEWER</option>
+                    </select>
+                  </td>
+                  <td class="py-3 px-4">
+                    <div class="flex items-center gap-1.5">
+                      <span class="w-2 h-2 rounded-full" :class="u.is_active ? 'bg-[#10B981]' : 'bg-[#EF4444]'"></span>
+                      <span x-text="u.is_active ? 'Hoạt động' : 'Đã khóa'"></span>
+                    </div>
+                  </td>
+                  <td class="py-3 px-4 font-mono-code text-slate-500" x-text="u.created_at"></td>
+                  <td class="py-3 px-4 text-right">
+                    <button
+                      type="button"
+                      x-show="u.id !== currentUser?.id"
+                      @click="toggleUserActive(u)"
+                      class="px-2.5 py-1 rounded enterprise-border text-xs font-medium transition"
+                      :class="u.is_active ? 'text-red-600 hover:bg-red-50' : 'text-emerald-700 hover:bg-emerald-50'"
+                      x-text="u.is_active ? 'Khóa' : 'Mở khóa'"
+                    ></button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+        <!-- GOOGLE DRIVE STATELESS CLOUD BRIDGE (ADMIN ONLY) -->
+        <div class="bg-white rounded-xl enterprise-border p-5 space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="text-sm font-bold text-slate-900">Google Drive Cloud Bridge (Stateless Storage & DB Backup)</h3>
+                <span
+                  class="px-2 py-0.5 rounded text-[10px] font-mono-code font-semibold border"
+                  :class="gdriveStatus.enabled ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'"
+                  x-text="gdriveStatus.enabled ? 'GOOGLE_DRIVE_CLOUD' : 'LOCAL_HYBRID'"
+                ></span>
+              </div>
+              <p class="text-xs text-slate-500 mt-0.5">
+                Tự động đồng bộ Database (<span class="font-mono-code">port_checklist_backup.db</span>) và lưu chứng từ chuẩn hóa vào thư mục <span class="font-mono-code">PortCall_Checklist_Storage</span>
+              </p>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <a
+                x-show="gdriveStatus.root_folder_url"
+                :href="gdriveStatus.root_folder_url"
+                target="_blank"
+                rel="noopener"
+                class="h-8 px-3 rounded-lg enterprise-border bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-800 text-xs font-medium flex items-center gap-1.5 transition"
+              >
+                <span>Mở thư mục gốc Drive ↗</span>
+              </a>
+              <button
+                type="button"
+                @click="syncGdriveManual('PUSH')"
+                :disabled="isLoading || !gdriveStatus.enabled"
+                class="h-8 px-3 rounded-lg enterprise-border bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-medium text-slate-800 transition"
+              >
+                Đồng bộ DB lên Drive ngay
+              </button>
+              <button
+                type="button"
+                @click="syncGdriveManual('PULL')"
+                :disabled="isLoading || !gdriveStatus.enabled"
+                class="h-8 px-3 rounded-lg enterprise-border bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-medium text-slate-700 transition"
+              >
+                Tải DB từ Drive về
+              </button>
+            </div>
+          </div>
+
+          <form @submit.prevent="saveGdriveConfig()" class="grid grid-cols-1 md:grid-cols-12 gap-3 pt-2 border-t border-[#E2E8F0] text-xs">
+            <div class="md:col-span-6">
+              <label class="block font-medium text-slate-700 mb-1">Google Apps Script Web App URL (<span class="font-mono-code">GDRIVE_BRIDGE_URL</span>)</label>
+              <input
+                type="url"
+                x-model="gdriveForm.bridge_url"
+                placeholder="https://script.google.com/macros/s/.../exec"
+                class="w-full h-8 px-2.5 rounded-md enterprise-border font-mono-code text-xs focus:outline-none focus:border-slate-900"
+              />
+            </div>
+            <div class="md:col-span-4">
+              <label class="block font-medium text-slate-700 mb-1">Khóa bảo mật (<span class="font-mono-code">BRIDGE_SECRET_KEY</span>)</label>
+              <input
+                type="text"
+                x-model="gdriveForm.secret_key"
+                placeholder="PORTCALL_SECRET_2026"
+                class="w-full h-8 px-2.5 rounded-md enterprise-border font-mono-code text-xs focus:outline-none focus:border-slate-900"
+              />
+            </div>
+            <div class="md:col-span-2 flex items-end">
+              <button
+                type="submit"
+                :disabled="isLoading"
+                class="w-full h-8 rounded-md bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium transition"
+              >
+                Lưu & Kết nối
+              </button>
+            </div>
+          </form>
+
+          <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 font-mono-code">
+            <span>Lần đồng bộ gần nhất: <strong class="text-slate-700" x-text="gdriveStatus.last_sync_at || 'Chưa đồng bộ'"></strong></span>
+            <span x-show="gdriveStatus.last_sync_error" class="text-red-600" x-text="'Cảnh báo: ' + gdriveStatus.last_sync_error"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 3B: AUDIT LOGS (ADMIN ONLY)                                          -->
+    <!-- ========================================================================= -->
+    <div x-show="activeTab === 'audit' && currentUser?.role === 'ADMIN'" class="flex-1 p-6 overflow-y-auto">
+      <div class="max-w-5xl mx-auto space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-bold text-slate-900">Nhật ký Bảo mật (Audit Logs)</h2>
+            <p class="text-xs text-slate-500">Ghi nhận thời gian thực mọi sự kiện đăng nhập, tạo tàu, tải lên và xóa chứng từ</p>
+          </div>
+          <button
+            type="button"
+            @click="loadAuditLogs()"
+            class="h-8 px-3 rounded-lg bg-white enterprise-border hover:bg-slate-50 text-xs font-medium text-slate-700 transition"
+          >
+            Làm mới
+          </button>
+        </div>
+
+        <div class="bg-white rounded-xl enterprise-border overflow-hidden">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="border-b border-[#E2E8F0] bg-[#F8FAFC] text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                <th class="py-2.5 px-4 w-44">Thời gian</th>
+                <th class="py-2.5 px-4 w-32">Tài khoản</th>
+                <th class="py-2.5 px-4 w-24">Role</th>
+                <th class="py-2.5 px-4 w-36">Hành động</th>
+                <th class="py-2.5 px-4">Chi tiết</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[#E2E8F0] text-xs">
+              <template x-for="log in auditLogs" :key="log.id">
+                <tr class="hover:bg-slate-50/60">
+                  <td class="py-2.5 px-4 font-mono-code text-slate-500" x-text="log.timestamp"></td>
+                  <td class="py-2.5 px-4 font-mono-code font-semibold text-slate-900" x-text="log.username"></td>
+                  <td class="py-2.5 px-4 font-mono-code text-slate-500" x-text="log.role"></td>
+                  <td class="py-2.5 px-4">
+                    <span
+                      class="font-mono-code text-[11px] px-1.5 py-0.5 rounded border font-medium"
+                      :class="{
+                        'bg-slate-100 text-slate-700 border-slate-200': log.action === 'LOGIN',
+                        'bg-blue-50 text-blue-700 border-blue-200': log.action === 'CREATE_VESSEL',
+                        'bg-emerald-50 text-emerald-700 border-emerald-200': log.action === 'UPLOAD_FILE',
+                        'bg-red-50 text-red-700 border-red-200': log.action === 'DELETE_FILE',
+                        'bg-amber-50 text-amber-800 border-amber-200': log.action === 'USER_MGMT'
+                      }"
+                      x-text="log.action"
+                    ></span>
+                  </td>
+                  <td class="py-2.5 px-4 text-slate-700" x-text="log.details"></td>
+                </tr>
+              </template>
+              <tr x-show="auditLogs.length === 0">
+                <td colspan="5" class="py-6 text-center text-slate-400">Chưa có bản ghi nhật ký nào.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: TẠO LỊCH TÀU HÀNG LOẠT (CHỈ CẦN TÊN TÀU, LOẠI TÀU, NGÀY GIỜ ETA)    -->
+  <!-- ========================================================================= -->
+  <div
+    x-cloak
+    x-show="showBatchModal"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4"
+  >
+    <div
+      @click.away="showBatchModal = false"
+      class="bg-white rounded-xl enterprise-border shadow-xl max-w-xl w-full overflow-hidden"
+    >
+      <div class="px-5 py-3.5 border-b border-[#E2E8F0] flex items-center justify-between">
+        <h3 class="text-sm font-bold text-slate-900">Tạo lịch tàu</h3>
+        <button type="button" @click="showBatchModal = false" class="text-slate-400 hover:text-slate-700 text-xs">✕</button>
+      </div>
+
+      <div class="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
+        <div class="flex items-center justify-between">
+          <span class="text-xs text-slate-500">Nhập Tên tàu, Loại tàu và Giờ dự kiến cập cảng (ETA)</span>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              @click="fillSampleBatchRows()"
+              class="px-2.5 py-1 rounded enterprise-border text-xs text-slate-600 hover:bg-slate-50"
+            >
+              Điền mẫu
+            </button>
+            <button
+              type="button"
+              @click="addBatchRow()"
+              class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-800"
+            >
+              + Thêm dòng
+            </button>
+          </div>
+        </div>
+
+        <template x-for="(row, index) in batchRows" :key="index">
+          <div class="grid grid-cols-12 gap-2 items-center">
+            <div class="col-span-5">
+              <input
+                type="text"
+                x-model="row.vessel_name"
+                placeholder="Tên tàu (VD: MV PACIFIC)"
+                class="w-full h-8 px-2.5 rounded-md enterprise-border text-xs uppercase font-medium focus:outline-none focus:border-slate-900"
+              />
+            </div>
+            <div class="col-span-3">
+              <select
+                x-model="row.vessel_type"
+                class="w-full h-8 px-2 rounded-md enterprise-border text-xs bg-white focus:outline-none focus:border-slate-900"
+              >
+                <option value="CONTAINER_INTL">Container Quốc tế</option>
+                <option value="BULK">Tàu Hàng rời</option>
+                <option value="DOMESTIC">Tàu Nội địa</option>
+              </select>
+            </div>
+            <div class="col-span-3">
+              <input
+                type="text"
+                x-model="row.eta"
+                placeholder="YYYY-MM-DD HH:mm"
+                class="w-full h-8 px-2.5 rounded-md enterprise-border text-xs font-mono-code focus:outline-none focus:border-slate-900"
+              />
+            </div>
+            <div class="col-span-1 text-right">
+              <button
+                type="button"
+                @click="removeBatchRow(index)"
+                :disabled="batchRows.length <= 1"
+                class="text-slate-400 hover:text-red-600 disabled:opacity-30 text-xs px-1"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <div class="px-5 py-3 bg-[#F8FAFC] border-t border-[#E2E8F0] flex items-center justify-end gap-2">
+        <button
+          type="button"
+          @click="showBatchModal = false"
+          class="h-8 px-3 rounded-md enterprise-border bg-white text-xs text-slate-600 hover:bg-slate-50"
+        >
+          Hủy
+        </button>
+        <button
+          type="button"
+          @click="submitBatchCreate()"
+          :disabled="isLoading"
+          class="h-8 px-3.5 rounded-md bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium"
+        >
+          Tạo lịch tàu
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: TẠO TÀI KHOẢN USER MỚI (ADMIN ONLY)                                 -->
+  <!-- ========================================================================= -->
+  <div
+    x-cloak
+    x-show="showCreateUserModal"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4"
+  >
+    <div
+      @click.away="showCreateUserModal = false"
+      class="bg-white rounded-xl enterprise-border shadow-xl max-w-md w-full overflow-hidden"
+    >
+      <div class="px-5 py-3.5 border-b border-[#E2E8F0] flex items-center justify-between">
+        <h3 class="text-sm font-bold text-slate-900">Tạo tài khoản mới</h3>
+        <button type="button" @click="showCreateUserModal = false" class="text-slate-400 hover:text-slate-700 text-xs">✕</button>
+      </div>
+
+      <form @submit.prevent="submitCreateUser()" class="p-5 space-y-3 text-xs">
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">Username</label>
+          <input
+            type="text"
+            x-model="newUserForm.username"
+            required
+            placeholder="VD: ops_lan"
+            class="w-full h-8 px-2.5 rounded-md enterprise-border font-mono-code focus:outline-none focus:border-slate-900"
+          />
+        </div>
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">Họ và tên</label>
+          <input
+            type="text"
+            x-model="newUserForm.full_name"
+            required
+            placeholder="VD: Trần Thị Lan"
+            class="w-full h-8 px-2.5 rounded-md enterprise-border focus:outline-none focus:border-slate-900"
+          />
+        </div>
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">Mật khẩu</label>
+          <input
+            type="password"
+            x-model="newUserForm.password"
+            required
+            placeholder="Tối thiểu 6 ký tự"
+            class="w-full h-8 px-2.5 rounded-md enterprise-border font-mono-code focus:outline-none focus:border-slate-900"
+          />
+        </div>
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">Vai trò (Role)</label>
+          <select
+            x-model="newUserForm.role"
+            class="w-full h-8 px-2 rounded-md enterprise-border font-mono-code bg-white focus:outline-none focus:border-slate-900"
+          >
+            <option value="OPS">OPS (Chuyên viên Chứng từ)</option>
+            <option value="VIEWER">VIEWER (Chỉ xem)</option>
+            <option value="ADMIN">ADMIN (Quản trị viên)</option>
+          </select>
+        </div>
+
+        <div class="pt-2 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            @click="showCreateUserModal = false"
+            class="h-8 px-3 rounded-md enterprise-border bg-white text-slate-600"
+          >
+            Hủy
+          </button>
+          <button
+            type="submit"
+            :disabled="isLoading"
+            class="h-8 px-3.5 rounded-md bg-slate-900 hover:bg-slate-800 text-white font-medium"
+          >
+            Tạo tài khoản
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- APPLICATION LOGIC -->
+  <script>
+    function portCallApp() {
+      return {
+        authChecked: true,
+        currentUser: null,
+        loginForm: { username: '', password: '' },
+        showPassword: false,
+        loginError: '',
+
+        activeTab: 'vessels', // 'vessels' | 'users' | 'audit'
+        vessels: [],
+        stats: { total: 0, red: 0, orange: 0, green: 0, total_files: 0 },
+        sampleFiles: [],
+        selectedVesselId: null,
+        filterColor: 'ALL',
+
+        showDemoMenu: false,
+        showBatchModal: false,
+        showCreateUserModal: false,
+        isDraggingOverMain: false,
+        dragOverVesselId: null,
+        isLoading: false,
+
+        batchRows: [],
+        usersList: [],
+        auditLogs: [],
+        newUserForm: { username: '', full_name: '', password: '', role: 'OPS' },
+        gdriveStatus: {
+          enabled: false,
+          mode: 'LOCAL_HYBRID',
+          root_folder_name: 'PortCall_Checklist_Storage',
+          root_folder_url: '',
+          last_sync_at: null,
+          last_sync_error: null
+        },
+        gdriveForm: { bridge_url: '', secret_key: 'PORTCALL_SECRET_2026' },
+        toast: { visible: false, message: '', type: 'info', timer: null },
+
+        get selectedVessel() {
+          return this.vessels.find(v => v.id === this.selectedVesselId) || this.vessels[0] || null;
+        },
+
+        canEdit() {
+          return Boolean(this.currentUser && (this.currentUser.role === 'ADMIN' || this.currentUser.role === 'OPS'));
+        },
+
+        statusLabel(color) {
+          if (color === 'GREEN') return 'Đủ hồ sơ';
+          if (color === 'ORANGE') return 'Thiếu chứng từ';
+          return 'Cần xử lý';
+        },
+
+        formatShortTime(ts) {
+          if (!ts) return '';
+          return ts.length > 10 ? ts.slice(11, 16) : ts;
+        },
+
+        showToast(message, type = 'info') {
+          if (this.toast.timer) clearTimeout(this.toast.timer);
+          this.toast.message = message;
+          this.toast.type = type;
+          this.toast.visible = true;
+          this.toast.timer = setTimeout(() => {
+            this.toast.visible = false;
+          }, 4000);
+        },
+
+        async init() {
+          await this.checkSession();
+        },
+
+        async checkSession() {
+          try {
+            const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
+            if (res.ok) {
+              const data = await res.json();
+              this.currentUser = data.user;
+              await this.loadWorkspaceData();
+            } else {
+              this.currentUser = null;
+            }
+          } catch (e) {
+            this.currentUser = null;
+          } finally {
+            this.authChecked = true;
+          }
+        },
+
+        async quickLogin(username, password) {
+          this.loginError = '';
+          this.loginForm.username = username;
+          this.loginForm.password = password;
+          await this.submitLogin();
+        },
+
+        async submitLogin() {
+          this.loginError = '';
+          if (!this.loginForm.username || !this.loginForm.password) {
+            this.loginError = 'Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.';
+            return;
+          }
+          this.isLoading = true;
+          try {
+            const res = await fetch('/api/auth/login', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                username: this.loginForm.username.trim(),
+                password: this.loginForm.password
+              })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+              this.loginError = data.detail || 'Tên đăng nhập hoặc mật khẩu không chính xác.';
+              return;
+            }
+            this.currentUser = data.user;
+            this.activeTab = 'vessels';
+            this.loginForm.password = '';
+            this.showToast(`Đăng nhập thành công (${this.currentUser.role})`, 'success');
+          } catch (err) {
+            this.loginError = 'Không thể kết nối máy chủ. Vui lòng thử lại.';
+            this.isLoading = false;
+            return;
+          }
+
+          try {
+            await this.loadWorkspaceData();
+          } catch (e) {
+            console.error(e);
+          } finally {
+            this.isLoading = false;
+          }
+        },
+
+        async logout() {
+          try {
+            await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+          } catch (e) {}
+          this.currentUser = null;
+          this.loginError = '';
+          this.loginForm.password = '';
+          this.showDemoMenu = false;
+          this.vessels = [];
+          this.usersList = [];
+          this.auditLogs = [];
+        },
+
+        async switchTab(tab) {
+          this.activeTab = tab;
+          if (tab === 'users' && this.currentUser?.role === 'ADMIN') {
+            await Promise.all([this.loadUsers(), this.loadGdriveStatus()]);
+          } else if (tab === 'audit' && this.currentUser?.role === 'ADMIN') {
+            await this.loadAuditLogs();
+          } else if (tab === 'vessels') {
+            await this.loadVessels(true);
+          }
+        },
+
+        async loadWorkspaceData() {
+          await Promise.all([this.loadConfig(), this.loadVessels(false)]);
+        },
+
+        async loadConfig() {
+          const res = await fetch('/api/config', { credentials: 'same-origin' });
+          if (res.ok) {
+            const data = await res.json();
+            this.sampleFiles = data.sample_files || [];
+            if (data.gdrive) {
+              this.gdriveStatus = data.gdrive;
+            }
+          }
+        },
+
+        async loadGdriveStatus() {
+          try {
+            const res = await fetch('/api/gdrive/status', { credentials: 'same-origin' });
+            if (res.ok) {
+              this.gdriveStatus = await res.json();
+            }
+          } catch (e) {}
+        },
+
+        async saveGdriveConfig() {
+          if (!this.gdriveForm.bridge_url) {
+            this.showToast('Vui lòng nhập URL Google Apps Script Web App.', 'warning');
+            return;
+          }
+          this.isLoading = true;
+          try {
+            const res = await fetch('/api/admin/gdrive-config', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                bridge_url: this.gdriveForm.bridge_url.trim(),
+                secret_key: this.gdriveForm.secret_key.trim() || 'PORTCALL_SECRET_2026'
+              })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Lỗi lưu cấu hình Google Drive Bridge');
+            if (data.gdrive) this.gdriveStatus = data.gdrive;
+            this.showToast(data.message, data.ping?.status === 'ok' ? 'success' : 'warning');
+          } catch (err) {
+            this.showToast(err.message, 'error');
+          } finally {
+            this.isLoading = false;
+          }
+        },
+
+        async syncGdriveManual(direction = 'PUSH') {
+          this.isLoading = true;
+          try {
+            const res = await fetch('/api/admin/gdrive-sync', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ direction })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Lỗi đồng bộ Google Drive');
+            if (data.gdrive) this.gdriveStatus = data.gdrive;
+            await this.loadVessels(false);
+            this.showToast(data.message, 'success');
+          } catch (err) {
+            this.showToast(err.message, 'error');
+          } finally {
+            this.isLoading = false;
+          }
+        },
+
+        async loadVessels(keepSelected = true) {
+          const res = await fetch('/api/vessels', { credentials: 'same-origin' });
+          if (res.status === 401) {
+            this.currentUser = null;
+            return;
+          }
+          if (res.ok) {
+            const data = await res.json();
+            this.vessels = data.vessels || [];
+            this.stats = data.stats || { total: 0, red: 0, orange: 0, green: 0, total_files: 0 };
+            if (!keepSelected || !this.selectedVesselId || !this.vessels.some(v => v.id === this.selectedVesselId)) {
+              this.selectedVesselId = this.vessels.length > 0 ? this.vessels[0].id : null;
+            }
+          }
+        },
+
+        filteredVessels() {
+          if (this.filterColor === 'ALL') return this.vessels;
+          return this.vessels.filter(v => v.status_color === this.filterColor);
+        },
+
+        selectVessel(id) {
+          this.selectedVesselId = id;
+        },
+
+        openBatchCreateModal() {
+          const today = new Date().toISOString().slice(0, 10);
+          this.batchRows = [
+            { vessel_name: '', vessel_type: 'CONTAINER_INTL', eta: `${today} 16:30` }
+          ];
+          this.showBatchModal = true;
+        },
+
+        addBatchRow() {
+          const today = new Date().toISOString().slice(0, 10);
+          this.batchRows.push({
+            vessel_name: '',
+            vessel_type: 'BULK',
+            eta: `${today} 18:00`
+          });
+        },
+
+        removeBatchRow(index) {
+          if (this.batchRows.length > 1) this.batchRows.splice(index, 1);
+        },
+
+        fillSampleBatchRows() {
+          const today = new Date().toISOString().slice(0, 10);
+          this.batchRows = [
+            { vessel_name: 'MV PACIFIC STAR', vessel_type: 'BULK', eta: `${today} 15:30` },
+            { vessel_name: 'MV SAIGON EXPRESS', vessel_type: 'CONTAINER_INTL', eta: `${today} 19:00` }
+          ];
+        },
+
+        async submitBatchCreate() {
+          const validRows = this.batchRows.filter(r => r.vessel_name && r.vessel_name.trim() !== '');
+          if (validRows.length === 0) {
+            this.showToast('Vui lòng nhập tên tàu.', 'warning');
+            return;
+          }
+          this.isLoading = true;
+          try {
+            const res = await fetch('/api/vessels/batch', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ vessels: validRows })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Không thể tạo tàu');
+            this.showBatchModal = false;
+            await this.loadVessels(false);
+            if (data.created_vessels && data.created_vessels.length > 0) {
+              this.selectedVesselId = data.created_vessels[0].id;
+            }
+            this.showToast(data.message, 'success');
+          } catch (err) {
+            this.showToast(err.message, 'error');
+          } finally {
+            this.isLoading = false;
+          }
+        },
+
+        async handleFileSelect(event) {
+          const files = event.target.files;
+          if (files && files.length > 0 && this.selectedVessel) {
+            await this.uploadFilesToVessel(this.selectedVessel.id, files);
+          }
+          event.target.value = '';
+        },
+
+        async handleMainDrop(event) {
+          this.isDraggingOverMain = false;
+          const files = event.dataTransfer?.files;
+          if (files && files.length > 0 && this.selectedVessel) {
+            await this.uploadFilesToVessel(this.selectedVessel.id, files);
+          }
+        },
+
+        async handleDropOnVesselCard(event, vesselId) {
+          this.dragOverVesselId = null;
+          this.selectedVesselId = vesselId;
+          const files = event.dataTransfer?.files;
+          if (files && files.length > 0) {
+            await this.uploadFilesToVessel(vesselId, files);
+          }
+        },
+
+        async uploadFilesToVessel(vesselId, fileList) {
+          const formData = new FormData();
+          for (let i = 0; i < fileList.length; i++) {
+            formData.append('files', fileList[i]);
+          }
+          this.isLoading = true;
+          try {
+            const res = await fetch(`/api/vessels/${vesselId}/upload`, {
+              method: 'POST',
+              credentials: 'same-origin',
+              body: formData
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Lỗi tải chứng từ');
+            await this.loadVessels(true);
+            this.notifyAfterUpload(data);
+          } catch (err) {
+            this.showToast(err.message, 'error');
+          } finally {
+            this.isLoading = false;
+          }
+        },
+
+        async simulateUploadFiles(filenames) {
+          if (!this.selectedVessel) return;
+          this.isLoading = true;
+          try {
+            const res = await fetch(`/api/vessels/${this.selectedVessel.id}/simulate-sample`, {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ filenames })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Lỗi nạp file mẫu');
+            await this.loadVessels(true);
+            this.notifyAfterUpload(data);
+          } catch (err) {
+            this.showToast(err.message, 'error');
+          } finally {
+            this.isLoading = false;
+          }
+        },
+
+        async runDemoScenario(scenario) {
+          if (!this.selectedVessel) return;
+          const vid = this.selectedVessel.id;
+          if (scenario === 'PARTIAL_ORANGE') {
+            await this.clearVesselFiles(vid, true);
+            await this.simulateUploadFiles(['scan_001.pdf', 'file_gui_sep.xlsx']);
+          } else if (scenario === 'FULL_GREEN') {
+            await this.clearVesselFiles(vid, true);
+            await this.simulateUploadFiles([
+              'scan_001.pdf',
+              'file_gui_sep.xlsx',
+              'vgm_bo_sung.pdf',
+              'doc_bl_full.pdf',
+              'crew_list_word.docx',
+              'port_clearance_99.pdf'
+            ]);
+          } else if (scenario === 'WRONG_VESSEL_RED') {
+            await this.simulateUploadFiles(['file_nham_tau.pdf']);
+          } else if (scenario === 'UNCLASSIFIED_TEST') {
+            await this.simulateUploadFiles(['__UNCLASSIFIED_DEMO__']);
+          }
+        },
+
+        notifyAfterUpload(data) {
+          const wrongFiles = (data.processed_files || []).filter(f => f.is_wrong_vessel === 1);
+          if (wrongFiles.length > 0) {
+            this.showToast(wrongFiles[0].error_message, 'error');
+          } else if (data.vessel?.status_color === 'GREEN') {
+            this.showToast(`Đủ hồ sơ: ${data.vessel.vessel_name}`, 'success');
+          } else if (data.vessel?.status_color === 'ORANGE') {
+            this.showToast(`${data.message} (${data.vessel.status_summary})`, 'warning');
+          } else {
+            this.showToast(data.message, 'info');
+          }
+        },
+
+        async classifyFileOneClick(fileId, newDocType) {
+          if (!newDocType) return;
+          this.isLoading = true;
+          try {
+            const res = await fetch(`/api/files/${fileId}/classify`, {
+              method: 'PUT',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ doc_type: newDocType })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Lỗi phân loại');
+            await this.loadVessels(true);
+            this.showToast(data.message, 'success');
+          } catch (err) {
+            this.showToast(err.message, 'error');
+          } finally {
+            this.isLoading = false;
+          }
+        },
+
+        async deleteFile(fileId) {
+          this.isLoading = true;
+          try {
+            const res = await fetch(`/api/files/${fileId}`, {
+              method: 'DELETE',
+              credentials: 'same-origin'
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Lỗi gỡ chứng từ');
+            await this.loadVessels(true);
+            this.showToast(data.message, 'info');
+          } catch (err) {
+            this.showToast(err.message, 'error');
+          } finally {
+            this.isLoading = false;
+          }
+        },
+
+        async clearVesselFiles(vesselId, silent = false) {
+          this.isLoading = true;
+          try {
+            const res = await fetch(`/api/vessels/${vesselId}/clear-files`, {
+              method: 'DELETE',
+              credentials: 'same-origin'
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Lỗi làm trống');
+            await this.loadVessels(true);
+            if (!silent) this.showToast(data.message, 'info');
+          } catch (err) {
+            if (!silent) this.showToast(err.message, 'error');
+          } finally {
+            this.isLoading = false;
+          }
+        },
+
+        async deleteVessel(vesselId) {
+          this.isLoading = true;
+          try {
+            const res = await fetch(`/api/vessels/${vesselId}`, {
+              method: 'DELETE',
+              credentials: 'same-origin'
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Lỗi xóa tàu');
+            await this.loadVessels(false);
+            this.showToast(data.message, 'info');
+          } catch (err) {
+            this.showToast(err.message, 'error');
+          } finally {
+            this.isLoading = false;
+          }
+        },
+
+        async resetDemoData() {
+          this.isLoading = true;
+          try {
+            const res = await fetch('/api/demo/reset', {
+              method: 'POST',
+              credentials: 'same-origin'
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Lỗi khôi phục');
+            await this.loadVessels(false);
+            this.showToast(data.message, 'success');
+          } catch (err) {
+            this.showToast(err.message, 'error');
+          } finally {
+            this.isLoading = false;
+          }
+        },
+
+        // ==================== ADMIN: USERS & AUDIT LOGS ====================
+        async loadUsers() {
+          const res = await fetch('/api/users', { credentials: 'same-origin' });
+          if (res.ok) {
+            const data = await res.json();
+            this.usersList = data.users || [];
+          }
+        },
+
+        async submitCreateUser() {
+          this.isLoading = true;
+          try {
+            const res = await fetch('/api/users', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.newUserForm)
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Không thể tạo tài khoản');
+            this.usersList = data.users || [];
+            this.showCreateUserModal = false;
+            this.newUserForm = { username: '', full_name: '', password: '', role: 'OPS' };
+            this.showToast(data.message, 'success');
+          } catch (err) {
+            this.showToast(err.message, 'error');
+          } finally {
+            this.isLoading = false;
+          }
+        },
+
+        async updateUserRole(userId, role) {
+          try {
+            const res = await fetch(`/api/users/${userId}`, {
+              method: 'PUT',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ role })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Không thể đổi quyền');
+            this.usersList = data.users || [];
+            this.showToast(data.message, 'success');
+          } catch (err) {
+            this.showToast(err.message, 'error');
+            await this.loadUsers();
+          }
+        },
+
+        async toggleUserActive(user) {
+          try {
+            const res = await fetch(`/api/users/${user.id}`, {
+              method: 'PUT',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ is_active: !user.is_active })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Lỗi cập nhật trạng thái');
+            this.usersList = data.users || [];
+            this.showToast(data.message, 'info');
+          } catch (err) {
+            this.showToast(err.message, 'error');
+          }
+        },
+
+        async loadAuditLogs() {
+          const res = await fetch('/api/audit-logs', { credentials: 'same-origin' });
+          if (res.ok) {
+            const data = await res.json();
+            this.auditLogs = data.logs || [];
+          }
+        }
+      };
+    }
+  </script>
+</body>
+</html>

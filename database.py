@@ -249,6 +249,11 @@ def init_db() -> None:
     if "gdrive_folder_url" not in vessel_cols:
         cursor.execute("ALTER TABLE vessels ADD COLUMN gdrive_folder_url TEXT DEFAULT ''")
 
+    cursor.execute("PRAGMA table_info(checklist_items)")
+    chk_cols = {row["name"] for row in cursor.fetchall()}
+    if "is_manual_verified" not in chk_cols:
+        cursor.execute("ALTER TABLE checklist_items ADD COLUMN is_manual_verified INTEGER DEFAULT 0")
+
     cursor.execute("PRAGMA table_info(uploaded_files)")
     existing_cols = {row["name"] for row in cursor.fetchall()}
     if "uploaded_by" not in existing_cols:
@@ -465,16 +470,112 @@ def create_vessel(
     return get_vessel_detail(vessel_id)
 
 
-def get_next_sequence_number(vessel_id: int, doc_type: str, conn: Optional[sqlite3.Connection] = None) -> int:
+def update_vessel_info(
+    vessel_id: int,
+    vessel_name: str,
+    eta: str,
+    vessel_type: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Cập nhật Tên tàu, Giờ ETA và Loại tàu (kèm đổi tên thư mục lưu trữ nếu thay đổi)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM vessels WHERE id = ?", (vessel_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return {}
+
+    old_vessel = dict(row)
+    v_name_clean = (vessel_name or old_vessel["vessel_name"]).strip().upper()
+    eta_clean = (eta or old_vessel["eta"]).strip().replace("T", " ")
+    eta_date = extract_date_str(eta_clean)
+    v_type_code = normalize_vessel_type(vessel_type) if vessel_type else old_vessel["vessel_type"]
+    v_type_info = VESSEL_TYPES[v_type_code]
+
+    old_folder_meta = get_vessel_folder_meta_internal(vessel_id)
+    old_abs_folder = get_vessel_storage_abs_path(vessel_id)
+
+    new_folder_name = f"{eta_date}_{sanitize_token(v_name_clean)}"
+    new_rel_storage_folder = f"./storage/{new_folder_name}/"
+    new_abs_folder = os.path.join(STORAGE_ROOT, new_folder_name)
+
+    if old_abs_folder and os.path.exists(old_abs_folder) and os.path.abspath(old_abs_folder) != os.path.abspath(new_abs_folder):
+        try:
+            if not os.path.exists(new_abs_folder):
+                os.rename(old_abs_folder, new_abs_folder)
+            else:
+                os.makedirs(new_abs_folder, exist_ok=True)
+        except Exception:
+            os.makedirs(new_abs_folder, exist_ok=True)
+    else:
+        os.makedirs(new_abs_folder, exist_ok=True)
+
+    cursor.execute(
+        """
+        UPDATE vessels
+        SET vessel_name = ?, eta = ?, eta_date = ?, vessel_type = ?, vessel_type_label = ?, storage_folder = ?
+        WHERE id = ?
+        """,
+        (v_name_clean, eta_clean, eta_date, v_type_code, v_type_info["label"], new_rel_storage_folder, vessel_id),
+    )
+
+    # Nếu thay đổi loại tàu thì đồng bộ lại danh sách checklist_items theo loại tàu mới
+    if v_type_code != old_vessel["vessel_type"]:
+        cursor.execute("SELECT doc_type, is_manual_verified FROM checklist_items WHERE vessel_id = ?", (vessel_id,))
+        existing_verified = {r["doc_type"]: r["is_manual_verified"] for r in cursor.fetchall()}
+        cursor.execute("DELETE FROM checklist_items WHERE vessel_id = ?", (vessel_id,))
+        for item in v_type_info["checklist"]:
+            mv = existing_verified.get(item["doc_type"], 0)
+            cursor.execute(
+                """
+                INSERT INTO checklist_items (
+                    vessel_id, doc_type, doc_name, is_required,
+                    requires_count_match, expected_count, actual_count,
+                    file_count, status, note, is_manual_verified
+                ) VALUES (?, ?, ?, 1, ?, 0, 0, 0, 'MISSING', 'Chưa nộp', ?)
+                """,
+                (vessel_id, item["doc_type"], item["doc_name"], item["requires_count_match"], mv),
+            )
+
+    conn.commit()
+    conn.close()
+
+    detail = recalculate_vessel_status(vessel_id)
+    detail["_old_folder_name"] = old_folder_meta["folder_name"]
+    detail["_new_folder_name"] = new_folder_name
+    return detail
+
+
+def get_next_sequence_number(
+    vessel_id: int,
+    doc_type: str,
+    file_ext: str = "",
+    conn: Optional[sqlite3.Connection] = None,
+) -> int:
+    """
+    Tính số thứ tự cho file mới theo (vessel_id, doc_type, file_ext).
+    Nếu 2 file cùng loại chứng từ nhưng KHÁC định dạng (VD: 1 file .docx và 1 file .pdf cho CREW_LIST),
+    mỗi định dạng sẽ có seq_num = 1 -> [CREW_LIST]_TEN_TAU.docx và [CREW_LIST]_TEN_TAU.pdf (không gắn _(2)).
+    """
     should_close = False
     if conn is None:
         conn = get_connection()
         should_close = True
     cursor = conn.cursor()
-    cursor.execute(
-        "SELECT COUNT(*) AS cnt FROM uploaded_files WHERE vessel_id = ? AND doc_type = ?",
-        (vessel_id, doc_type),
-    )
+    if file_ext:
+        ext_norm = file_ext.lower() if file_ext.startswith(".") else f".{file_ext.lower()}"
+        cursor.execute(
+            """
+            SELECT COUNT(*) AS cnt FROM uploaded_files
+            WHERE vessel_id = ? AND doc_type = ? AND LOWER(file_ext) = ? AND is_wrong_vessel = 0
+            """,
+            (vessel_id, doc_type, ext_norm),
+        )
+    else:
+        cursor.execute(
+            "SELECT COUNT(*) AS cnt FROM uploaded_files WHERE vessel_id = ? AND doc_type = ? AND is_wrong_vessel = 0",
+            (vessel_id, doc_type),
+        )
     row = cursor.fetchone()
     count = row["cnt"] if row else 0
     if should_close:
@@ -485,7 +586,7 @@ def get_next_sequence_number(vessel_id: int, doc_type: str, conn: Optional[sqlit
 def recalculate_vessel_status(vessel_id: int) -> Dict[str, Any]:
     """
     Tính toán lại trạng thái Checklist, đối chiếu số lượng B/L & VGM với Manifest,
-    và cập nhật trạng thái màu của tàu (RED / ORANGE / GREEN).
+    hỗ trợ cờ xác nhận thủ công (is_manual_verified) và cập nhật trạng thái màu của tàu (RED / ORANGE / GREEN).
     """
     conn = get_connection()
     cursor = conn.cursor()
@@ -531,6 +632,7 @@ def recalculate_vessel_status(vessel_id: int) -> Dict[str, Any]:
 
     for item in checklist_items:
         d_type = item["doc_type"]
+        is_manual = int(item.get("is_manual_verified") or 0)
         matching_valid_files = [f for f in valid_files if f["doc_type"] == d_type]
         f_count = len(matching_valid_files)
 
@@ -547,55 +649,62 @@ def recalculate_vessel_status(vessel_id: int) -> Dict[str, Any]:
 
         actual_count = len(unique_codes) if len(unique_codes) > 0 else sum_extracted_count
 
-        if d_type == "MANIFEST":
+        if is_manual == 1:
+            item_expected = expected_bl_count if (d_type == "MANIFEST" or item["requires_count_match"] == 1) else 1
+            status = "COMPLETED"
+            if d_type == "MANIFEST":
+                note = f"✓ Đạt ({expected_bl_count} B/L)" if expected_bl_count > 0 else "✓ Đạt"
+            elif item["requires_count_match"] == 1 and expected_bl_count > 0:
+                disp_cnt = actual_count if actual_count > 0 else expected_bl_count
+                note = f"✓ Đạt ({disp_cnt}/{expected_bl_count} B/L)"
+            else:
+                note = "✓ Đạt"
+        elif d_type == "MANIFEST":
             item_expected = expected_bl_count
             if f_count == 0:
                 status = "MISSING"
-                note = "Chưa nộp"
+                note = "✕ Chưa nộp"
                 all_required_completed = False
                 missing_count += 1
             else:
                 status = "COMPLETED"
-                note = f"{expected_bl_count} B/L" if expected_bl_count > 0 else "Đã nộp"
+                note = f"✓ Đạt ({expected_bl_count} B/L)" if expected_bl_count > 0 else "✓ Đạt"
         elif item["requires_count_match"] == 1:
             item_expected = expected_bl_count
             if f_count == 0:
                 status = "MISSING"
-                if item_expected > 0:
-                    note = f"Đã có 0/{item_expected} bộ (Đang thiếu {item_expected} bộ)"
-                else:
-                    note = "Chưa nộp"
+                note = "✕ Chưa nộp"
                 all_required_completed = False
                 missing_count += 1
             else:
                 if item_expected > 0:
                     if actual_count < item_expected:
                         status = "INCOMPLETE"
-                        missing_qty = item_expected - actual_count
-                        note = f"Đã có {actual_count}/{item_expected} bộ (Đang thiếu {missing_qty} bộ)"
+                        note = f"— Thiếu ({actual_count}/{item_expected} B/L)"
                         all_required_completed = False
-                        mismatch_notes.append(f"{d_type} {actual_count}/{item_expected}")
+                        mismatch_notes.append(f"{d_type} ({actual_count}/{item_expected} B/L)")
                     else:
                         status = "COMPLETED"
-                        note = f"Đã đủ {actual_count}/{item_expected} bộ"
+                        note = f"✓ Đạt ({actual_count}/{item_expected} B/L)"
                 else:
                     if len(manifest_files) == 0:
                         status = "INCOMPLETE"
-                        note = f"Đã có {actual_count} bộ (Chờ Manifest)"
+                        note = "— Chờ Manifest"
                         all_required_completed = False
+                        mismatch_notes.append(f"{d_type} (Chờ Manifest)")
                     else:
                         status = "COMPLETED"
-                        note = f"{actual_count} bộ"
+                        note = f"✓ Đạt ({actual_count} B/L)" if actual_count > 0 else "✓ Đạt"
         else:
             item_expected = 1
             if f_count == 0:
                 status = "MISSING"
-                note = "Chưa nộp"
+                note = "✕ Chưa nộp"
                 all_required_completed = False
                 missing_count += 1
             else:
                 status = "COMPLETED"
-                note = "Đã nộp"
+                note = "✓ Đạt"
 
         cursor.execute(
             """
@@ -607,7 +716,7 @@ def recalculate_vessel_status(vessel_id: int) -> Dict[str, Any]:
         )
 
     # 3. Tính màu trạng thái tổng thể của tàu (RED / ORANGE / GREEN)
-    if total_files == 0:
+    if total_files == 0 and all(int(it.get("is_manual_verified") or 0) == 0 for it in checklist_items):
         status_color = "RED"
         status_summary = "Cần xử lý · Chưa có chứng từ"
     elif len(wrong_vessel_files) > 0:
@@ -654,6 +763,52 @@ def _sanitize_file_for_response(r: sqlite3.Row) -> Dict[str, Any]:
     return f_dict
 
 
+def _build_standardized_match_info(item: Dict[str, Any], wrong_vessel_files: List[Dict[str, Any]]) -> Dict[str, str]:
+    """
+    Quy toàn bộ cột ĐỐI CHIẾU về đúng 3 trạng thái chuẩn:
+    1. GREEN (#10B981) + '✓': '✓ Đạt', '✓ Đạt (5/5 B/L)', '✓ Đạt (5 B/L)'
+    2. ORANGE (#F59E0B) + '—': '— Thiếu (3/5 B/L)', '— Chờ Manifest'
+    3. RED (#EF4444) + '✕': '✕ Chưa nộp', '✕ Sai tàu'
+    """
+    d_type = item.get("doc_type", "")
+    status = item.get("status", "MISSING")
+    req_match = int(item.get("requires_count_match") or 0)
+    exp = int(item.get("expected_count") or 0)
+    act = int(item.get("actual_count") or 0)
+
+    has_wrong_vessel_for_type = any(wf.get("doc_type") == d_type for wf in wrong_vessel_files)
+
+    if status == "COMPLETED":
+        if d_type == "MANIFEST":
+            label = f"✓ Đạt ({exp} B/L)" if exp > 0 else "✓ Đạt"
+        elif req_match == 1:
+            if exp > 0:
+                shown_act = act if act >= exp else (act if act > 0 else exp)
+                label = f"✓ Đạt ({shown_act}/{exp} B/L)"
+            elif act > 0:
+                label = f"✓ Đạt ({act} B/L)"
+            else:
+                label = "✓ Đạt"
+        else:
+            label = "✓ Đạt"
+        return {"match_state": "GREEN", "match_label": label}
+
+    if status == "INCOMPLETE":
+        if req_match == 1:
+            if exp <= 0:
+                label = "— Chờ Manifest"
+            else:
+                label = f"— Thiếu ({act}/{exp} B/L)"
+        else:
+            label = "— Thiếu"
+        return {"match_state": "ORANGE", "match_label": label}
+
+    # status == 'MISSING'
+    if has_wrong_vessel_for_type:
+        return {"match_state": "RED", "match_label": "✕ Sai tàu"}
+    return {"match_state": "RED", "match_label": "✕ Chưa nộp"}
+
+
 def get_vessel_detail(vessel_id: int) -> Dict[str, Any]:
     """
     Lấy thông tin chi tiết của 1 tàu kèm Checklist và danh sách file.
@@ -669,7 +824,6 @@ def get_vessel_detail(vessel_id: int) -> Dict[str, Any]:
         return {}
 
     vessel = dict(row)
-    # Xóa đường dẫn vật lý trước khi trả về API
     vessel.pop("storage_folder", None)
 
     cursor.execute("SELECT * FROM checklist_items WHERE vessel_id = ? ORDER BY id ASC", (vessel_id,))
@@ -680,24 +834,29 @@ def get_vessel_detail(vessel_id: int) -> Dict[str, Any]:
 
     conn.close()
 
-    # Gắn danh sách file hợp lệ tương ứng vào từng dòng Checklist để hiển thị Data Table 4 cột
+    wrong_vessel_files = [f for f in files if f["is_wrong_vessel"] == 1]
+    unclassified_files = [f for f in files if f["doc_type"] == "UNCLASSIFIED" and f["is_wrong_vessel"] == 0]
+
     for item in checklist:
         item["files"] = [
             f for f in files if f["doc_type"] == item["doc_type"] and f["is_wrong_vessel"] == 0
         ]
+        m_info = _build_standardized_match_info(item, wrong_vessel_files)
+        item["match_state"] = m_info["match_state"]
+        item["match_label"] = m_info["match_label"]
 
     completed_items = sum(1 for item in checklist if item["status"] == "COMPLETED")
     total_items = len(checklist)
 
     vessel["checklist"] = checklist
     vessel["files"] = files
-    vessel["wrong_vessel_files"] = [f for f in files if f["is_wrong_vessel"] == 1]
-    vessel["unclassified_files"] = [f for f in files if f["doc_type"] == "UNCLASSIFIED" and f["is_wrong_vessel"] == 0]
+    vessel["wrong_vessel_files"] = wrong_vessel_files
+    vessel["unclassified_files"] = unclassified_files
     vessel["completed_checklist_count"] = completed_items
     vessel["total_checklist_count"] = total_items
     vessel["progress_percent"] = int(round((completed_items / total_items) * 100)) if total_items > 0 else 0
-    vessel["wrong_vessel_count"] = len(vessel["wrong_vessel_files"])
-    vessel["unclassified_count"] = len(vessel["unclassified_files"])
+    vessel["wrong_vessel_count"] = len(wrong_vessel_files)
+    vessel["unclassified_count"] = len(unclassified_files)
 
     return vessel
 

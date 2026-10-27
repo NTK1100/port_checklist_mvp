@@ -6,16 +6,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# Install DejaVu Unicode fonts for Vietnamese PDF rendering on Linux
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends fonts-dejavu-core && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy application source code
+# Copy application source code (including ./fonts/ with Vietnamese Unicode TTF)
 COPY . .
 
-# Ensure local storage and sample directories exist
-RUN mkdir -p /app/storage /app/sample_files_for_demo
+# Ensure local storage, fonts, and sample directories exist
+RUN mkdir -p /app/storage /app/sample_files_for_demo /app/fonts
 
 EXPOSE 8080
 

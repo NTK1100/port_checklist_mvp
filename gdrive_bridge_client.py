@@ -3,7 +3,7 @@ import json
 import base64
 import sqlite3
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 import requests
 
@@ -46,7 +46,7 @@ def get_bridge_url() -> str:
 
 
 def get_bridge_secret() -> str:
-    return (os.environ.get("BRIDGE_SECRET_KEY") or "PortCall_Secret_2026").strip()
+    return (os.environ.get("BRIDGE_SECRET_KEY") or "PORTCALL_SECRET_2026").strip()
 
 
 def is_bridge_enabled() -> bool:
@@ -54,10 +54,10 @@ def is_bridge_enabled() -> bool:
     return bool(url and url.startswith("https://script.google.com/"))
 
 
-def set_bridge_config(bridge_url: str, secret_key: str = "PortCall_Secret_2026") -> None:
-    """Cho phép Admin cập nhật GDRIVE_BRIDGE_URL và BRIDGE_SECRET_KEY ngay trên giao diện và lưu vào .env."""
+def set_bridge_config(bridge_url: str, secret_key: Optional[str] = None) -> None:
+    """Cho phép Admin cập nhật GDRIVE_BRIDGE_URL trên giao diện và lưu vào .env (BRIDGE_SECRET_KEY xử lý ngầm)."""
     clean_url = (bridge_url or "").strip()
-    clean_secret = (secret_key or "PortCall_Secret_2026").strip()
+    clean_secret = (secret_key or get_bridge_secret() or "PORTCALL_SECRET_2026").strip()
     os.environ["GDRIVE_BRIDGE_URL"] = clean_url
     os.environ["BRIDGE_SECRET_KEY"] = clean_secret
 
@@ -92,6 +92,7 @@ def set_bridge_config(bridge_url: str, secret_key: str = "PortCall_Secret_2026")
 
 
 def get_bridge_status() -> Dict[str, Any]:
+    """Trả về trạng thái kết nối Google Drive Cloud (Tuyệt đối không lộ BRIDGE_SECRET_KEY ra UI)."""
     url = get_bridge_url()
     enabled = is_bridge_enabled()
     masked_url = ""
@@ -102,9 +103,11 @@ def get_bridge_status() -> Dict[str, Any]:
         "mode": "GDRIVE_CLOUD" if enabled else "LOCAL_STORAGE",
         "bridge_url": url,
         "masked_url": masked_url,
+        "system_db_folder": ".PortCall_System_DB_DoNotDelete",
         "last_sync_at": _last_sync_info["last_sync_at"],
         "last_sync_status": _last_sync_info["last_sync_status"],
         "last_error": _last_sync_info["last_error"],
+        "last_sync_error": _last_sync_info["last_error"],
         "root_folder_url": _last_sync_info["root_folder_url"],
     }
 
@@ -158,16 +161,17 @@ def ping_bridge() -> Dict[str, Any]:
 def load_db_from_gdrive(db_path: str = DB_PATH) -> bool:
     """
     Gọi LOAD_DB khi Server vừa khởi động (startup):
-    - Nếu trên Google Drive đã có file port_checklist_backup.db hợp lệ, tải về ghi đè làm DB hiện hành.
+    - Nếu trên Google Drive (thư mục ẩn .PortCall_System_DB_DoNotDelete) đã có file port_checklist_backup.db hợp lệ,
+      tải về ghi đè làm DB hiện hành.
     - Trả về True nếu đã khôi phục từ Google Drive, False nếu trên Drive chưa có bản backup.
     """
     if not is_bridge_enabled():
         return False
 
     print("[GDriveBridge] Đang kiểm tra và tải port_checklist_backup.db từ Google Drive...")
-    res = _call_bridge({"action": "LOAD_DB"}, timeout=45)
+    res = _call_bridge({"action": "LOAD_DB", "systemDbFolderName": ".PortCall_System_DB_DoNotDelete"}, timeout=45)
     if not res.get("ok") or not res.get("exists") or not res.get("dbBase64"):
-        print("[GDriveBridge] Chưa có bản backup DB trên Google Drive, sẽ khởi tạo DB mới và đồng bộ lên Drive.")
+        print("[GDriveBridge] Chưa có bản backup DB trên Google Drive, sẽ tái tạo từ dữ liệu hiện hành và đẩy lên Drive.")
         return False
 
     try:
@@ -187,7 +191,7 @@ def load_db_from_gdrive(db_path: str = DB_PATH) -> bool:
 
 
 def sync_db_to_gdrive(db_path: str = DB_PATH) -> Dict[str, Any]:
-    """Đẩy toàn bộ file SQLite port_checklist.db lên Google Drive dưới dạng port_checklist_backup.db."""
+    """Đẩy toàn bộ file SQLite port_checklist.db lên thư mục ẩn .PortCall_System_DB_DoNotDelete trên Google Drive."""
     if not is_bridge_enabled() or not os.path.exists(db_path):
         return {"ok": False, "skipped": True}
 
@@ -195,7 +199,14 @@ def sync_db_to_gdrive(db_path: str = DB_PATH) -> Dict[str, Any]:
         with open(db_path, "rb") as f_in:
             raw_bytes = f_in.read()
         b64_str = base64.b64encode(raw_bytes).decode("ascii")
-        res = _call_bridge({"action": "SYNC_DB", "dbBase64": b64_str}, timeout=60)
+        res = _call_bridge(
+            {
+                "action": "SYNC_DB",
+                "systemDbFolderName": ".PortCall_System_DB_DoNotDelete",
+                "dbBase64": b64_str,
+            },
+            timeout=60,
+        )
         if res.get("ok"):
             print(f"[GDriveBridge] Đồng bộ port_checklist.db lên Google Drive thành công (FileID: {res.get('dbFileId')}).")
         return res
@@ -217,16 +228,16 @@ def _update_vessel_gdrive_meta(vessel_id: int, folder_id: str, folder_url: str) 
         print(f"[GDriveBridge] Lỗi cập nhật metadata folder tàu: {exc}")
 
 
-def _update_file_gdrive_meta(file_id: int, gdrive_file_id: str, gdrive_view_url: str) -> None:
+def _update_file_gdrive_meta(file_id: int, gdrive_file_id: str, gdrive_view_url: str, sync_status: str = "SYNCED") -> None:
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.execute(
             """
             UPDATE uploaded_files
-            SET gdrive_file_id = ?, gdrive_view_url = ?, sync_status = 'SYNCED'
+            SET gdrive_file_id = ?, gdrive_view_url = ?, sync_status = ?
             WHERE id = ?
             """,
-            (gdrive_file_id or "", gdrive_view_url or "", file_id),
+            (gdrive_file_id or "", gdrive_view_url or "", sync_status, file_id),
         )
         conn.commit()
         conn.close()
@@ -250,6 +261,30 @@ def bg_create_vessel_folder_and_sync(vessel_id: int, vessel_folder_name: str) ->
     sync_db_to_gdrive()
 
 
+def bg_rename_vessel_folder_and_sync(
+    vessel_id: int,
+    gdrive_folder_id: str,
+    old_folder_name: str,
+    new_folder_name: str,
+) -> None:
+    """BackgroundTask: Đổi tên thư mục tàu trên Google Drive khi cập nhật Tên tàu / ETA và đồng bộ DB."""
+    if not is_bridge_enabled():
+        return
+    if old_folder_name != new_folder_name:
+        res = _call_bridge(
+            {
+                "action": "RENAME_VESSEL_FOLDER",
+                "folderId": gdrive_folder_id,
+                "oldFolderName": old_folder_name,
+                "newFolderName": new_folder_name,
+            },
+            timeout=30,
+        )
+        if res.get("ok"):
+            _update_vessel_gdrive_meta(vessel_id, res.get("folderId", gdrive_folder_id), res.get("folderUrl", ""))
+    sync_db_to_gdrive()
+
+
 def bg_upload_doc_and_sync(
     file_id: int,
     vessel_id: int,
@@ -258,7 +293,7 @@ def bg_upload_doc_and_sync(
     stored_filename: str,
     mime_type: str,
 ) -> None:
-    """BackgroundTask: Đẩy file chứng từ đã đổi tên chuẩn lên thư mục tàu trên Google Drive và đồng bộ DB."""
+    """BackgroundTask: Đẩy file chứng từ hợp lệ đã đổi tên chuẩn lên thư mục tàu trên Google Drive và đồng bộ DB."""
     if not is_bridge_enabled():
         return
     if not os.path.exists(local_file_path):
@@ -280,7 +315,7 @@ def bg_upload_doc_and_sync(
             timeout=60,
         )
         if res.get("ok"):
-            _update_file_gdrive_meta(file_id, res.get("fileId", ""), res.get("viewUrl", ""))
+            _update_file_gdrive_meta(file_id, res.get("fileId", ""), res.get("viewUrl", ""), "SYNCED")
             if res.get("folderId"):
                 _update_vessel_gdrive_meta(vessel_id, res.get("folderId", ""), res.get("folderUrl", ""))
     except Exception as exc:
@@ -297,8 +332,9 @@ def bg_rename_doc_and_sync(
     vessel_folder_name: str,
     local_file_path: str,
     mime_type: str,
+    replace_existing: bool = True,
 ) -> None:
-    """BackgroundTask: Đổi tên file trên Google Drive khi phân loại 1-Click và đồng bộ DB."""
+    """BackgroundTask: Đổi tên file trên Google Drive (hoặc upload lên Drive khi vừa xác nhận file) và đồng bộ DB."""
     if not is_bridge_enabled():
         return
     if gdrive_file_id:
@@ -307,15 +343,15 @@ def bg_rename_doc_and_sync(
                 "action": "RENAME_DOC",
                 "fileId": gdrive_file_id,
                 "newFileName": new_stored_filename,
+                "replaceExistingInFolder": replace_existing,
             },
             timeout=30,
         )
         if res.get("ok"):
-            _update_file_gdrive_meta(file_id, res.get("fileId", gdrive_file_id), res.get("viewUrl", ""))
+            _update_file_gdrive_meta(file_id, res.get("fileId", gdrive_file_id), res.get("viewUrl", ""), "SYNCED")
             sync_db_to_gdrive()
             return
 
-    # Nếu file chưa có trên Drive thì upload mới
     bg_upload_doc_and_sync(
         file_id=file_id,
         vessel_id=vessel_id,
@@ -326,19 +362,75 @@ def bg_rename_doc_and_sync(
     )
 
 
+def rename_doc_on_gdrive_sync(gdrive_file_id: str, new_stored_filename: str, replace_existing: bool = True) -> Dict[str, Any]:
+    """Đổi tên trực tiếp file trên Google Drive (dùng trong đồng bộ 2 chiều từ Drive về Web)."""
+    if not is_bridge_enabled() or not gdrive_file_id:
+        return {"ok": False}
+    return _call_bridge(
+        {
+            "action": "RENAME_DOC",
+            "fileId": gdrive_file_id,
+            "newFileName": new_stored_filename,
+            "replaceExistingInFolder": replace_existing,
+        },
+        timeout=30,
+    )
+
+
+def fetch_vessel_folder_from_gdrive(
+    gdrive_folder_id: str,
+    vessel_folder_name: str,
+    known_file_ids: List[str],
+) -> Dict[str, Any]:
+    """Gọi SYNC_FOLDER_FROM_DRIVE để quét các file người dùng tải trực tiếp lên thư mục tàu trên Google Drive."""
+    if not is_bridge_enabled():
+        return {"ok": False, "error": "Chưa kích hoạt kết nối Google Drive Cloud."}
+    return _call_bridge(
+        {
+            "action": "SYNC_FOLDER_FROM_DRIVE",
+            "folderId": gdrive_folder_id or "",
+            "vesselFolderName": vessel_folder_name,
+            "knownFileIds": known_file_ids,
+        },
+        timeout=60,
+    )
+
+
 def bg_delete_doc_and_sync(gdrive_file_id: str, vessel_folder_name: str, stored_filename: str) -> None:
     """BackgroundTask: Xóa file chứng từ trên Google Drive và đồng bộ DB."""
     if not is_bridge_enabled():
         return
-    _call_bridge(
-        {
-            "action": "DELETE_DOC",
-            "fileId": gdrive_file_id,
-            "vesselFolderName": vessel_folder_name,
-            "fileName": stored_filename,
-        },
-        timeout=30,
-    )
+    if gdrive_file_id or stored_filename:
+        _call_bridge(
+            {
+                "action": "DELETE_DOC",
+                "fileId": gdrive_file_id,
+                "vesselFolderName": vessel_folder_name,
+                "fileName": stored_filename,
+            },
+            timeout=30,
+        )
+    sync_db_to_gdrive()
+
+
+def bg_batch_delete_docs_and_sync(items: List[Dict[str, str]]) -> None:
+    """BackgroundTask: Xóa hàng loạt file trên Google Drive và đồng bộ DB."""
+    if not is_bridge_enabled():
+        return
+    for it in items:
+        fid = it.get("gdrive_file_id") or ""
+        vfolder = it.get("vessel_folder_name") or ""
+        sname = it.get("stored_filename") or ""
+        if fid or sname:
+            _call_bridge(
+                {
+                    "action": "DELETE_DOC",
+                    "fileId": fid,
+                    "vesselFolderName": vfolder,
+                    "fileName": sname,
+                },
+                timeout=25,
+            )
     sync_db_to_gdrive()
 
 

@@ -52,7 +52,7 @@
     x-cloak
     x-show="toast.visible"
     x-transition.opacity.duration.150ms
-    class="fixed bottom-4 right-4 z-50 max-w-sm bg-slate-900 text-white px-3.5 py-2.5 rounded-lg shadow-lg border border-slate-800 flex items-center gap-2.5 text-xs font-medium"
+    class="fixed bottom-4 right-4 z-50 max-w-md bg-slate-900 text-white px-3.5 py-2.5 rounded-lg shadow-lg border border-slate-800 flex items-center gap-2.5 text-xs font-medium"
   >
     <span
       class="w-2 h-2 rounded-full shrink-0"
@@ -234,7 +234,7 @@
         <!-- Storage Mode Indicator (Google Drive Cloud vs Local Hybrid) -->
         <div
           class="hidden lg:flex items-center gap-1.5 px-2 py-0.5 rounded-md enterprise-border bg-[#F8FAFC] text-[11px] font-mono-code"
-          :title="gdriveStatus.enabled ? ('Đồng bộ Google Drive: ' + (gdriveStatus.last_sync_at || 'Sẵn sàng')) : 'Chế độ ổ cứng cục bộ (Hybrid Local)'"
+          :title="gdriveStatus.enabled ? ('Đồng bộ Google Drive 2 chiều: ' + (gdriveStatus.last_sync_at || 'Sẵn sàng')) : 'Chế độ ổ cứng cục bộ (Hybrid Local)'"
         >
           <span
             class="w-1.5 h-1.5 rounded-full"
@@ -242,7 +242,7 @@
           ></span>
           <span
             class="text-slate-600"
-            x-text="gdriveStatus.enabled ? 'GDrive Cloud' : 'Local Storage'"
+            x-text="gdriveStatus.enabled ? 'GDrive 2-Way Sync' : 'Local Storage'"
           ></span>
         </div>
       </div>
@@ -346,7 +346,7 @@
               class="w-full px-3 py-1.5 text-left hover:bg-slate-50 flex items-center gap-2 text-slate-700"
             >
               <span class="w-2 h-2 rounded-full bg-[#EF4444] shrink-0"></span>
-              <span>Nạp file sai tên tàu (MV EVER GIVEN)</span>
+              <span>Nạp file sai tên tàu (Chặn lưu Drive)</span>
             </button>
             <button
               type="button"
@@ -354,7 +354,7 @@
               class="w-full px-3 py-1.5 text-left hover:bg-slate-50 flex items-center gap-2 text-slate-700"
             >
               <span class="w-2 h-2 rounded-full bg-slate-400 shrink-0"></span>
-              <span>Nạp file scan mờ (Test chọn loại 1-Click)</span>
+              <span>Nạp file scan mờ (Test xác nhận & Lưu Drive)</span>
             </button>
 
             <div class="my-1 border-t border-[#E2E8F0]"></div>
@@ -414,15 +414,38 @@
     <!-- ========================================================================= -->
     <div x-show="activeTab === 'vessels'" class="flex-1 flex overflow-hidden">
 
-      <!-- LEFT PANE: COMPACT VESSEL LIST (WIDTH 320PX - NO VOYAGE CODE) -->
+      <!-- LEFT PANE: COMPACT VESSEL LIST WITH SORTING (WIDTH 320PX) -->
       <aside class="w-80 shrink-0 bg-white border-r border-[#E2E8F0] flex flex-col h-[calc(100vh-48px)]">
-        <div class="px-3.5 py-2.5 border-b border-[#E2E8F0] flex items-center justify-between">
-          <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Danh sách tàu</span>
-          <span class="font-mono-code text-[11px] text-slate-400" x-text="filteredVessels().length + ' tàu'"></span>
+        <div class="px-3.5 py-2.5 border-b border-[#E2E8F0] space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Danh sách tàu</span>
+            <span class="font-mono-code text-[11px] text-slate-400" x-text="sortedFilteredVessels().length + ' tàu'"></span>
+          </div>
+
+          <!-- Sorting Controls (ETA / Status / Name + Asc/Desc Toggle) -->
+          <div class="flex items-center gap-1.5">
+            <select
+              x-model="sortBy"
+              class="flex-1 h-7 px-2 rounded-md enterprise-border bg-[#F8FAFC] text-[11px] text-slate-700 font-medium focus:outline-none focus:border-slate-900"
+              title="Tiêu chí sắp xếp danh sách tàu"
+            >
+              <option value="ETA">Sắp xếp: Giờ cập cảng (ETA)</option>
+              <option value="STATUS">Sắp xếp: Trạng thái hồ sơ</option>
+              <option value="NAME">Sắp xếp: Tên tàu (A → Z)</option>
+            </select>
+            <button
+              type="button"
+              @click="sortDir = (sortDir === 'asc' ? 'desc' : 'asc')"
+              class="h-7 px-2 rounded-md enterprise-border bg-[#F8FAFC] hover:bg-slate-100 text-[11px] font-mono-code font-semibold text-slate-700 transition flex items-center gap-1"
+              :title="sortDir === 'asc' ? 'Đang sắp xếp Tăng dần (Bấm để đảo chiều Giảm dần)' : 'Đang sắp xếp Giảm dần (Bấm để đảo chiều Tăng dần)'"
+            >
+              <span x-text="sortDir === 'asc' ? '↑ Tăng' : '↓ Giảm'"></span>
+            </button>
+          </div>
         </div>
 
         <div class="flex-1 overflow-y-auto divide-y divide-[#E2E8F0]">
-          <template x-for="vessel in filteredVessels()" :key="vessel.id">
+          <template x-for="vessel in sortedFilteredVessels()" :key="vessel.id">
             <div
               @click="selectVessel(vessel.id)"
               @dragover.prevent="if (canEdit()) dragOverVesselId = vessel.id"
@@ -455,7 +478,7 @@
 
               <!-- Row 2: ETA (Mono) + Thin Progress Bar -->
               <div class="mt-2 flex items-center justify-between gap-3">
-                <span class="font-mono-code text-[11px] text-slate-400" x-text="vessel.eta"></span>
+                <span class="font-mono-code text-[11px] text-slate-500" x-text="'ETA: ' + vessel.eta"></span>
                 <div class="w-20 h-1 bg-slate-200 rounded-full overflow-hidden">
                   <div
                     class="h-full rounded-full transition-all duration-300"
@@ -471,7 +494,7 @@
             </div>
           </template>
 
-          <div x-show="filteredVessels().length === 0" class="p-6 text-center text-xs text-slate-400">
+          <div x-show="sortedFilteredVessels().length === 0" class="p-6 text-center text-xs text-slate-400">
             Không có tàu nào khớp bộ lọc.
           </div>
         </div>
@@ -481,12 +504,24 @@
       <main class="flex-1 overflow-y-auto h-[calc(100vh-48px)] p-6">
         <div x-show="selectedVessel" class="max-w-5xl mx-auto space-y-4">
 
-          <!-- VESSEL COMPACT HEADER (NO VOYAGE CODE + EXPORT PDF & DOCX BUTTONS) -->
+          <!-- VESSEL COMPACT HEADER (WITH EDIT ETA BUTTON, 2-WAY DRIVE SYNC & DROPDOWN EXPORT REPORT) -->
           <div class="bg-white rounded-xl enterprise-border px-5 py-4 flex flex-wrap items-center justify-between gap-4">
-            <div class="space-y-1">
-              <div class="flex items-center gap-3 flex-wrap">
+            <div class="space-y-1.5">
+              <div class="flex items-center gap-2.5 flex-wrap">
                 <h2 class="text-base font-bold text-slate-900 tracking-tight" x-text="selectedVessel?.vessel_name"></h2>
-                <span class="text-xs text-slate-500" x-text="selectedVessel?.vessel_type_label"></span>
+                <span class="px-2 py-0.5 rounded bg-slate-100 text-xs text-slate-600 font-medium" x-text="selectedVessel?.vessel_type_label"></span>
+
+                <!-- Nút sửa thông tin tàu & giờ cập cảng (ETA) -->
+                <button
+                  type="button"
+                  x-show="canEdit()"
+                  @click="openEditVesselModal()"
+                  class="px-2 py-0.5 rounded enterprise-border bg-white hover:bg-slate-50 text-[11px] font-medium text-slate-600 hover:text-slate-900 transition flex items-center gap-1"
+                  title="Chỉnh sửa Tên tàu, Loại tàu hoặc Giờ cập cảng (ETA)"
+                >
+                  <span>✎ Sửa thông tin / ETA</span>
+                </button>
+
                 <div class="h-3.5 w-[1px] bg-[#E2E8F0]"></div>
                 <!-- 8px Status Dot + Status Label -->
                 <div class="flex items-center gap-1.5">
@@ -499,25 +534,37 @@
                     }"
                   ></span>
                   <span
-                    class="text-xs font-medium"
+                    class="text-xs font-semibold"
                     :class="{
-                      'text-emerald-700': selectedVessel?.status_color === 'GREEN',
-                      'text-amber-700': selectedVessel?.status_color === 'ORANGE',
-                      'text-red-700': selectedVessel?.status_color === 'RED'
+                      'text-[#10B981]': selectedVessel?.status_color === 'GREEN',
+                      'text-[#F59E0B]': selectedVessel?.status_color === 'ORANGE',
+                      'text-[#EF4444]': selectedVessel?.status_color === 'RED'
                     }"
                     x-text="statusLabel(selectedVessel?.status_color)"
                   ></span>
                 </div>
               </div>
 
-              <div class="flex items-center gap-4 text-xs text-slate-500">
-                <span>ETA: <strong class="font-mono-code font-medium text-slate-700" x-text="selectedVessel?.eta"></strong></span>
-                <span>Tổng B/L theo Manifest: <strong class="font-mono-code font-medium text-slate-700" x-text="(selectedVessel?.expected_bl_count || 0) + ' B/L'"></strong></span>
+              <div class="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
+                <span>Giờ cập cảng (ETA): <strong class="font-mono-code font-semibold text-slate-800" x-text="selectedVessel?.eta"></strong></span>
+                <span>Tổng B/L theo Manifest: <strong class="font-mono-code font-semibold text-slate-800" x-text="(selectedVessel?.expected_bl_count || 0) + ' B/L'"></strong></span>
               </div>
             </div>
 
-            <!-- Header Actions: Drive Folder, Export PDF, Export Word (.docx), Clear, Delete -->
+            <!-- Header Actions: 2-Way Sync Drive, Folder Drive, Dropdown Xuất báo cáo ▾, Làm trống, Xóa tàu -->
             <div class="flex flex-wrap items-center gap-2">
+              <!-- Nút Đồng bộ 2 chiều Google Drive -->
+              <button
+                type="button"
+                @click="syncVesselFromDrive(selectedVessel.id, false)"
+                :disabled="isLoading"
+                class="h-7 px-2.5 rounded-md enterprise-border bg-white hover:bg-slate-50 text-xs text-slate-700 font-medium transition flex items-center gap-1.5"
+                title="Quét thư mục tàu trên Google Drive để nhận file mới, tự động đọc nội dung & đổi tên chuẩn"
+              >
+                <span :class="isSyncingDrive ? 'animate-spin inline-block' : ''">↻</span>
+                <span>Đồng bộ Drive</span>
+              </button>
+
               <a
                 x-show="selectedVessel && selectedVessel.gdrive_folder_url"
                 :href="selectedVessel?.gdrive_folder_url || '#'"
@@ -530,29 +577,48 @@
                 <span>Folder Drive ↗</span>
               </a>
 
-              <a
-                x-show="selectedVessel"
-                :href="selectedVessel ? `/api/vessels/${selectedVessel.id}/export/pdf` : '#'"
-                class="h-7 px-2.5 rounded-md enterprise-border bg-white hover:bg-slate-50 text-xs text-slate-700 font-medium transition flex items-center gap-1.5"
-                title="Tải Phiếu Kiểm Tra Hồ Sơ định dạng PDF"
-              >
-                <svg class="w-3.5 h-3.5 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <span>Xuất PDF</span>
-              </a>
+              <!-- Gom nút "Xuất báo cáo ▾" (PDF / Word / Excel) -->
+              <div class="relative" @click.away="showExportMenu = false">
+                <button
+                  type="button"
+                  @click="showExportMenu = !showExportMenu"
+                  class="h-7 px-2.5 rounded-md enterprise-border bg-slate-900 hover:bg-slate-800 text-xs text-white font-medium transition flex items-center gap-1.5"
+                >
+                  <span>Xuất báo cáo ▾</span>
+                </button>
 
-              <a
-                x-show="selectedVessel"
-                :href="selectedVessel ? `/api/vessels/${selectedVessel.id}/export/docx` : '#'"
-                class="h-7 px-2.5 rounded-md enterprise-border bg-white hover:bg-slate-50 text-xs text-slate-700 font-medium transition flex items-center gap-1.5"
-                title="Tải Phiếu Kiểm Tra Hồ Sơ định dạng Word (.docx)"
-              >
-                <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <span>Xuất Word (.docx)</span>
-              </a>
+                <div
+                  x-cloak
+                  x-show="showExportMenu"
+                  x-transition.opacity.duration.100ms
+                  class="absolute right-0 mt-1.5 w-48 bg-white rounded-xl enterprise-border shadow-lg py-1.5 z-40 text-xs"
+                >
+                  <a
+                    :href="selectedVessel ? `/api/vessels/${selectedVessel.id}/export/pdf` : '#'"
+                    @click="showExportMenu = false"
+                    class="w-full px-3 py-2 text-left hover:bg-slate-50 flex items-center justify-between text-slate-700 font-medium"
+                  >
+                    <span>Xuất PDF (.pdf)</span>
+                    <span class="text-[10px] font-mono-code px-1.5 py-0.5 rounded bg-red-50 text-red-700">PDF</span>
+                  </a>
+                  <a
+                    :href="selectedVessel ? `/api/vessels/${selectedVessel.id}/export/docx` : '#'"
+                    @click="showExportMenu = false"
+                    class="w-full px-3 py-2 text-left hover:bg-slate-50 flex items-center justify-between text-slate-700 font-medium"
+                  >
+                    <span>Xuất Word (.docx)</span>
+                    <span class="text-[10px] font-mono-code px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">DOCX</span>
+                  </a>
+                  <a
+                    :href="selectedVessel ? `/api/vessels/${selectedVessel.id}/export/xlsx` : '#'"
+                    @click="showExportMenu = false"
+                    class="w-full px-3 py-2 text-left hover:bg-slate-50 flex items-center justify-between text-slate-700 font-medium"
+                  >
+                    <span>Xuất Excel (.xlsx)</span>
+                    <span class="text-[10px] font-mono-code px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">XLSX</span>
+                  </a>
+                </div>
+              </div>
 
               <button
                 type="button"
@@ -576,100 +642,266 @@
             </div>
           </div>
 
-          <!-- COMPACT DROPZONE (64PX HEIGHT - SUPPORTS .PDF, .XLSX, .DOCX) -->
+          <!-- COMPACT DROPZONE (SUPPORTS .PDF, .XLSX, .DOCX + OVERWRITE MODE TOGGLE) -->
           <div
             x-show="canEdit()"
+            class="bg-white rounded-xl border border-dashed border-slate-300 hover:border-slate-500 px-4 py-3 flex flex-wrap items-center justify-between gap-3 transition"
+            :class="isDraggingOverMain ? 'dropzone-hover' : ''"
             @dragover.prevent="isDraggingOverMain = true"
             @dragleave.prevent="isDraggingOverMain = false"
             @drop.prevent="handleMainDrop($event)"
-            @click="$refs.fileInput.click()"
-            class="h-16 bg-white rounded-xl border border-dashed border-slate-300 hover:border-slate-500 px-4 flex items-center justify-center gap-2.5 cursor-pointer transition"
-            :class="isDraggingOverMain ? 'dropzone-hover' : ''"
           >
-            <input
-              type="file"
-              x-ref="fileInput"
-              multiple
-              accept=".pdf,.xlsx,.docx"
-              class="hidden"
-              @change="handleFileSelect($event)"
-            />
-            <svg class="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-            <span class="text-xs font-medium text-slate-600">
-              Kéo thả chứng từ (<span class="font-mono-code">.pdf</span>, <span class="font-mono-code">.xlsx</span>, <span class="font-mono-code">.docx</span>) hoặc <span class="text-slate-900 underline font-semibold">Chọn file</span>
-            </span>
+            <div @click="$refs.fileInput.click()" class="flex items-center gap-2.5 cursor-pointer flex-1 min-w-[260px]">
+              <input
+                type="file"
+                x-ref="fileInput"
+                multiple
+                accept=".pdf,.xlsx,.docx"
+                class="hidden"
+                @change="handleFileSelect($event)"
+              />
+              <svg class="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              <span class="text-xs font-medium text-slate-600">
+                Kéo thả chứng từ (<span class="font-mono-code">.pdf</span>, <span class="font-mono-code">.xlsx</span>, <span class="font-mono-code">.docx</span>) hoặc <span class="text-slate-900 underline font-semibold">Chọn file tải lên</span>
+                <span class="text-[11px] text-slate-400 ml-1">(Khác đuôi mở rộng tự giữ tên gốc, không gắn _(2))</span>
+              </span>
+            </div>
+
+            <!-- Tùy chọn khi upload trùng loại chứng từ & trùng định dạng -->
+            <div class="flex items-center gap-2 text-[11px] text-slate-600 shrink-0" @click.stop>
+              <span class="text-slate-400">Khi trùng định dạng:</span>
+              <button
+                type="button"
+                @click="replaceOnUpload = false"
+                class="px-2 py-1 rounded border font-medium transition"
+                :class="!replaceOnUpload ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'"
+              >
+                Lưu bổ sung _(2)
+              </button>
+              <button
+                type="button"
+                @click="replaceOnUpload = true"
+                class="px-2 py-1 rounded border font-medium transition"
+                :class="replaceOnUpload ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'"
+              >
+                Ghi đè file cũ
+              </button>
+            </div>
           </div>
 
-          <!-- SLIM ALERT BAR FOR WRONG_VESSEL -->
-          <template x-for="errFile in (selectedVessel?.wrong_vessel_files || [])" :key="errFile.id">
-            <div class="bg-red-50/90 border border-red-200 rounded-lg px-3.5 py-2 flex items-center justify-between gap-3 text-xs">
-              <div class="flex items-center gap-2 min-w-0">
-                <span class="w-2 h-2 rounded-full bg-[#EF4444] shrink-0"></span>
-                <span class="font-mono-code font-medium text-red-900 truncate" x-text="errFile.original_filename"></span>
-                <span class="text-red-700 truncate" x-text="errFile.error_message"></span>
+          <!-- CONFLICT PROMPT BANNER (KHI VỪA UPLOAD FILE TRÙNG LOẠI & TRÙNG ĐỊNH DẠNG) -->
+          <template x-for="conf in recentConflicts" :key="conf.file_id">
+            <div class="bg-blue-50/90 border border-blue-200 rounded-lg px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-blue-600 shrink-0"></span>
+                <span>
+                  Đã có chứng từ cùng loại và cùng định dạng (<strong class="font-mono-code" x-text="conf.base_standard_filename"></strong>).
+                  File mới đang lưu bổ sung là <strong class="font-mono-code" x-text="conf.stored_filename"></strong>.
+                </span>
               </div>
               <div class="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  @click="replaceExistingFile(conf.file_id)"
+                  class="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-white font-medium transition"
+                >
+                  ⇄ Ghi đè (Thay thế file cũ trên Drive)
+                </button>
+                <button
+                  type="button"
+                  @click="dismissConflict(conf.file_id)"
+                  class="px-2.5 py-1 rounded bg-white border border-blue-200 text-slate-700 hover:bg-blue-100 font-medium transition"
+                >
+                  Giữ lưu bổ sung _(2)
+                </button>
+              </div>
+            </div>
+          </template>
+
+          <!-- BATCH ACTION TOOLBAR (HIỂN THỊ KHI TÍCH CHỌN >= 1 FILE) -->
+          <div
+            x-cloak
+            x-show="canEdit() && selectedFileIds.length > 0"
+            class="bg-slate-900 text-white rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs shadow-sm"
+          >
+            <div class="flex items-center gap-2.5">
+              <input
+                type="checkbox"
+                :checked="isAllFilesSelected()"
+                @change="toggleSelectAllFiles()"
+                class="w-3.5 h-3.5 rounded accent-emerald-500 cursor-pointer"
+              />
+              <span class="font-medium">
+                Đã chọn <strong class="font-mono-code text-emerald-400" x-text="selectedFileIds.length"></strong> chứng từ
+              </span>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                @click="batchConfirmSelectedFiles()"
+                :disabled="isLoading"
+                class="h-7 px-3 rounded-md bg-[#10B981] hover:bg-emerald-600 text-white font-semibold transition flex items-center gap-1"
+              >
+                <span>✓ Xác nhận các mục đã chọn</span>
+              </button>
+              <button
+                type="button"
+                @click="batchDeleteSelectedFiles()"
+                :disabled="isLoading"
+                class="h-7 px-3 rounded-md bg-[#EF4444] hover:bg-red-600 text-white font-semibold transition flex items-center gap-1"
+              >
+                <span>✕ Gỡ các file đã chọn</span>
+              </button>
+              <button
+                type="button"
+                @click="selectedFileIds = []"
+                class="h-7 px-2.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+              >
+                Bỏ chọn
+              </button>
+            </div>
+          </div>
+
+          <!-- STAGED WARNING BAR FOR WRONG_VESSEL (CHẶN LƯU DRIVE TỰ ĐỘNG - CHO PHÉP XÁC NHẬN HOẶC XÓA) -->
+          <template x-for="errFile in (selectedVessel?.wrong_vessel_files || [])" :key="errFile.id">
+            <div class="bg-red-50/95 border border-red-200 rounded-lg px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <input
+                  type="checkbox"
+                  x-show="canEdit()"
+                  :value="errFile.id"
+                  :checked="selectedFileIds.includes(errFile.id)"
+                  @change="toggleFileSelection(errFile.id)"
+                  class="w-3.5 h-3.5 rounded accent-slate-900 cursor-pointer shrink-0"
+                />
+                <span class="w-2 h-2 rounded-full bg-[#EF4444] shrink-0"></span>
+                <span class="font-mono-code font-semibold text-red-950 truncate" x-text="errFile.original_filename"></span>
+                <span class="text-red-700" x-text="errFile.error_message"></span>
+                <span class="px-1.5 py-0.5 rounded bg-red-100 text-red-800 font-mono-code text-[10px] border border-red-200 shrink-0">
+                  Chưa lưu lên Drive
+                </span>
+              </div>
+              <div class="flex flex-wrap items-center gap-2 shrink-0">
                 <a
                   :href="errFile.download_url"
                   target="_blank"
-                  class="text-red-700 hover:underline font-mono-code text-[11px]"
-                >Mở file</a>
-                <button
-                  type="button"
-                  x-show="canEdit()"
-                  @click="deleteFile(errFile.id)"
-                  class="px-2 py-0.5 rounded bg-white border border-red-200 text-red-700 hover:bg-red-100 font-medium transition"
-                >
-                  Gỡ file
-                </button>
+                  class="text-red-700 hover:underline font-mono-code text-[11px] mr-1"
+                >Xem file</a>
+
+                <div x-show="canEdit()" class="flex items-center gap-1.5">
+                  <select
+                    x-model="stagedDocTypes[errFile.id]"
+                    x-init="if (!stagedDocTypes[errFile.id]) stagedDocTypes[errFile.id] = (errFile.doc_type !== 'UNCLASSIFIED' ? errFile.doc_type : 'VGM')"
+                    class="h-7 px-2 rounded bg-white border border-red-300 text-xs font-mono-code text-slate-800 focus:outline-none"
+                  >
+                    <option value="MANIFEST">MANIFEST</option>
+                    <option value="BL">BL</option>
+                    <option value="VGM">VGM</option>
+                    <option value="CREW_LIST">CREW_LIST</option>
+                    <option value="PORT_CLEARANCE">PORT_CLEARANCE</option>
+                    <option value="STOWAGE_PLAN">STOWAGE_PLAN</option>
+                    <option value="MATES_RECEIPT">MATES_RECEIPT</option>
+                  </select>
+                  <button
+                    type="button"
+                    @click="confirmStagedFile(errFile.id, stagedDocTypes[errFile.id] || errFile.doc_type || 'VGM')"
+                    class="h-7 px-2.5 rounded bg-[#10B981] hover:bg-emerald-600 text-white font-semibold transition"
+                  >
+                    ✓ Vẫn xác nhận là đúng & Lưu Drive
+                  </button>
+                  <button
+                    type="button"
+                    @click="deleteFile(errFile.id)"
+                    class="h-7 px-2.5 rounded bg-white border border-red-300 text-red-700 hover:bg-red-600 hover:text-white font-semibold transition"
+                  >
+                    ✕ Xóa bỏ
+                  </button>
+                </div>
               </div>
             </div>
           </template>
 
-          <!-- SLIM BAR FOR UNCLASSIFIED FILES (1-CLICK CLASSIFICATION) -->
+          <!-- STAGED BAR FOR UNCLASSIFIED FILES (CHỌN LOẠI -> XÁC NHẬN & LƯU DRIVE) -->
           <template x-for="uFile in (selectedVessel?.unclassified_files || [])" :key="uFile.id">
-            <div class="bg-amber-50/90 border border-amber-200 rounded-lg px-3.5 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div class="flex items-center gap-2 min-w-0">
+            <div class="bg-amber-50/95 border border-amber-200 rounded-lg px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <input
+                  type="checkbox"
+                  x-show="canEdit()"
+                  :value="uFile.id"
+                  :checked="selectedFileIds.includes(uFile.id)"
+                  @change="toggleFileSelection(uFile.id)"
+                  class="w-3.5 h-3.5 rounded accent-slate-900 cursor-pointer shrink-0"
+                />
                 <span class="w-2 h-2 rounded-full bg-[#F59E0B] shrink-0"></span>
-                <span class="font-mono-code font-medium text-amber-950" x-text="uFile.original_filename"></span>
-                <span class="text-amber-800">Chưa nhận diện được loại chứng từ tự động</span>
+                <span class="font-mono-code font-semibold text-amber-950" x-text="uFile.original_filename"></span>
+                <span class="text-amber-800">Chưa rõ loại chứng từ (Chưa lưu lên Drive)</span>
               </div>
-              <div class="flex items-center gap-2 shrink-0" x-show="canEdit()">
+              <div class="flex flex-wrap items-center gap-2 shrink-0" x-show="canEdit()">
+                <a
+                  :href="uFile.download_url"
+                  target="_blank"
+                  class="text-amber-800 hover:underline font-mono-code text-[11px] mr-1"
+                >Xem file</a>
                 <select
-                  @change="classifyFileOneClick(uFile.id, $event.target.value)"
+                  x-model="stagedDocTypes[uFile.id]"
+                  x-init="if (!stagedDocTypes[uFile.id]) stagedDocTypes[uFile.id] = 'MANIFEST'"
                   class="h-7 px-2 rounded bg-white border border-amber-300 text-xs font-mono-code text-slate-800 focus:outline-none"
                 >
-                  <option value="" selected disabled>Chọn loại chứng từ...</option>
-                  <option value="MANIFEST">MANIFEST</option>
-                  <option value="BL">BL</option>
-                  <option value="VGM">VGM</option>
-                  <option value="CREW_LIST">CREW_LIST</option>
-                  <option value="PORT_CLEARANCE">PORT_CLEARANCE</option>
-                  <option value="STOWAGE_PLAN">STOWAGE_PLAN</option>
-                  <option value="MATES_RECEIPT">MATES_RECEIPT</option>
+                  <option value="MANIFEST">MANIFEST (Lược khai)</option>
+                  <option value="BL">BL (Vận đơn)</option>
+                  <option value="VGM">VGM (Phiếu cân)</option>
+                  <option value="CREW_LIST">CREW_LIST (Thuyền viên)</option>
+                  <option value="PORT_CLEARANCE">PORT_CLEARANCE (Rời cảng)</option>
+                  <option value="STOWAGE_PLAN">STOWAGE_PLAN (Sơ đồ xếp hàng)</option>
+                  <option value="MATES_RECEIPT">MATES_RECEIPT (Biên lai thuyền phó)</option>
                 </select>
                 <button
                   type="button"
-                  @click="deleteFile(uFile.id)"
-                  class="px-2 py-1 rounded bg-white border border-amber-200 text-slate-600 hover:text-red-600 transition"
+                  @click="confirmStagedFile(uFile.id, stagedDocTypes[uFile.id] || 'MANIFEST')"
+                  class="h-7 px-2.5 rounded bg-[#10B981] hover:bg-emerald-600 text-white font-semibold transition"
                 >
-                  Gỡ
+                  ✓ Xác nhận & Lưu Drive
+                </button>
+                <button
+                  type="button"
+                  @click="deleteFile(uFile.id)"
+                  class="h-7 px-2.5 rounded bg-white border border-amber-300 text-red-600 hover:bg-red-600 hover:text-white font-semibold transition"
+                >
+                  ✕ Xóa bỏ
                 </button>
               </div>
             </div>
           </template>
 
-          <!-- CHECKLIST DATA TABLE (4 COLUMNS) -->
+          <!-- CHECKLIST DATA TABLE (4 COLUMNS WITH SELECT ALL CHECKBOX & SIMPLIFIED UNIFIED STATUS) -->
           <div class="bg-white rounded-xl enterprise-border overflow-hidden">
             <table class="w-full text-left border-collapse">
               <thead>
                 <tr class="border-b border-[#E2E8F0] bg-[#F8FAFC] text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                   <th class="py-2.5 px-4 w-44">Mã chuẩn</th>
                   <th class="py-2.5 px-4 w-52">Loại chứng từ</th>
-                  <th class="py-2.5 px-4">Chứng từ đã nộp</th>
-                  <th class="py-2.5 px-4 w-48 text-right">Đối chiếu</th>
+                  <th class="py-2.5 px-4">
+                    <div class="flex items-center justify-between gap-2">
+                      <span>Chứng từ đã nộp</span>
+                      <label
+                        x-show="canEdit() && getAllVesselFileIds().length > 0"
+                        class="inline-flex items-center gap-1.5 text-[11px] font-normal normal-case text-slate-600 cursor-pointer select-none"
+                      >
+                        <input
+                          type="checkbox"
+                          :checked="isAllFilesSelected()"
+                          @change="toggleSelectAllFiles()"
+                          class="w-3.5 h-3.5 rounded accent-slate-900 cursor-pointer"
+                        />
+                        <span>Chọn tất cả (<span class="font-mono-code" x-text="getAllVesselFileIds().length"></span>)</span>
+                      </label>
+                    </div>
+                  </th>
+                  <th class="py-2.5 px-4 w-56 text-right">Đối chiếu</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-[#E2E8F0] text-xs">
@@ -681,9 +913,9 @@
                         <span
                           class="w-2 h-2 rounded-full shrink-0"
                           :class="{
-                            'bg-[#10B981]': item.status === 'COMPLETED',
-                            'bg-[#F59E0B]': item.status === 'INCOMPLETE',
-                            'bg-[#EF4444]': item.status === 'MISSING'
+                            'bg-[#10B981]': item.match_state === 'GREEN',
+                            'bg-[#F59E0B]': item.match_state === 'ORANGE',
+                            'bg-[#EF4444]': item.match_state === 'RED'
                           }"
                         ></span>
                         <span class="font-mono-code font-semibold text-slate-900" x-text="item.doc_type"></span>
@@ -693,18 +925,26 @@
                     <!-- Column 2: [Tên loại chứng từ] -->
                     <td class="py-3 px-4 text-slate-700 font-medium" x-text="item.doc_name"></td>
 
-                    <!-- Column 3: [Danh sách file đã tự động đổi tên chuẩn + Người up + Giờ up] -->
+                    <!-- Column 3: [Checkbox + Danh sách file chuẩn hóa + Nút Ghi đè / Đổi loại / Xóa rõ ràng] -->
                     <td class="py-3 px-4">
                       <span x-show="!item.files || item.files.length === 0" class="text-slate-400">—</span>
 
-                      <div class="space-y-1.5" x-show="item.files && item.files.length > 0">
+                      <div class="space-y-2" x-show="item.files && item.files.length > 0">
                         <template x-for="f in item.files" :key="f.id">
-                          <div class="flex items-center justify-between gap-2 group">
+                          <div class="flex items-center justify-between gap-2 bg-slate-50/70 hover:bg-slate-100/80 px-2.5 py-1.5 rounded-lg border border-slate-200/80">
                             <div class="flex items-center gap-2 min-w-0 flex-wrap">
+                              <input
+                                type="checkbox"
+                                x-show="canEdit()"
+                                :value="f.id"
+                                :checked="selectedFileIds.includes(f.id)"
+                                @change="toggleFileSelection(f.id)"
+                                class="w-3.5 h-3.5 rounded accent-slate-900 cursor-pointer shrink-0"
+                              />
                               <a
                                 :href="f.download_url"
                                 target="_blank"
-                                class="font-mono-code text-xs font-medium text-slate-900 hover:text-blue-600 hover:underline truncate"
+                                class="font-mono-code text-xs font-semibold text-slate-900 hover:text-blue-600 hover:underline truncate"
                                 :title="'File gốc: ' + f.original_filename"
                                 x-text="f.stored_filename"
                               ></a>
@@ -723,15 +963,24 @@
                               >Drive ↗</a>
                             </div>
 
-                            <div class="flex items-center gap-1.5 opacity-80 group-hover:opacity-100 shrink-0">
+                            <!-- Nút Ghi đè (nếu là file _(2)) & Nút Gỡ rõ ràng -->
+                            <div class="flex items-center gap-1.5 shrink-0" x-show="canEdit()">
                               <button
                                 type="button"
-                                x-show="canEdit()"
-                                @click="deleteFile(f.id)"
-                                class="text-[11px] text-slate-400 hover:text-red-600 px-1 transition"
-                                title="Gỡ file"
+                                x-show="f.stored_filename && f.stored_filename.includes('_(')"
+                                @click="replaceExistingFile(f.id)"
+                                class="px-2 py-0.5 rounded bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-200 text-[11px] font-medium transition"
+                                title="Ghi đè và thay thế file cũ cùng định dạng trên Google Drive"
                               >
-                                Gỡ
+                                ⇄ Ghi đè bản cũ
+                              </button>
+                              <button
+                                type="button"
+                                @click="deleteFile(f.id)"
+                                class="px-2 py-0.5 rounded bg-white hover:bg-red-600 text-red-600 hover:text-white border border-red-200 text-[11px] font-medium transition flex items-center gap-1"
+                                title="Gỡ chứng từ này khỏi Web và Google Drive"
+                              >
+                                <span>✕ Gỡ</span>
                               </button>
                             </div>
                           </div>
@@ -739,38 +988,43 @@
                       </div>
                     </td>
 
-                    <!-- Column 4: [Chỉ số đối chiếu: 5/5 B/L] -->
+                    <!-- Column 4: [Cột ĐỐI CHIẾU chuẩn hóa 3 trạng thái + Nút User chủ động Xác nhận Đạt] -->
                     <td class="py-3 px-4 text-right">
-                      <div x-show="item.requires_count_match === 1">
+                      <div class="flex flex-col items-end gap-1">
+                        <!-- Nhãn đối chiếu chuẩn hóa (✓ Đạt / — Thiếu / — Chờ Manifest / ✕ Chưa nộp / ✕ Sai tàu) -->
                         <span
-                          class="font-mono-code font-semibold"
+                          class="font-mono-code text-xs font-semibold inline-flex items-center gap-1"
                           :class="{
-                            'text-emerald-700': item.status === 'COMPLETED',
-                            'text-amber-600': item.status === 'INCOMPLETE',
-                            'text-slate-400': item.status === 'MISSING'
+                            'text-[#10B981]': item.match_state === 'GREEN',
+                            'text-[#F59E0B]': item.match_state === 'ORANGE',
+                            'text-[#EF4444]': item.match_state === 'RED'
                           }"
-                          x-text="item.actual_count + '/' + (item.expected_count || 0) + ' B/L'"
+                          x-text="item.match_label"
                         ></span>
-                        <div
-                          x-show="item.expected_count > 0 && item.actual_count < item.expected_count"
-                          class="text-[11px] text-amber-600 mt-0.5"
-                          x-text="'Thiếu ' + (item.expected_count - item.actual_count) + ' bộ'"
-                        ></div>
+
+                        <!-- Nút cho phép User chủ động bấm "✓ Xác nhận Đạt" khi file không có từ khóa chuẩn hoặc số lượng B/L đặc thù -->
+                        <div x-show="canEdit()" class="flex items-center gap-1">
+                          <button
+                            type="button"
+                            x-show="item.status !== 'COMPLETED'"
+                            @click="verifyChecklistItem(item.doc_type, true)"
+                            class="px-2 py-0.5 rounded bg-emerald-50 hover:bg-[#10B981] text-emerald-700 hover:text-white border border-emerald-200 text-[10px] font-semibold transition"
+                            title="Chủ động xác nhận hạng mục này Đạt (Tick xanh)"
+                          >
+                            ✓ Xác nhận Đạt
+                          </button>
+
+                          <button
+                            type="button"
+                            x-show="item.is_manual_verified === 1"
+                            @click="verifyChecklistItem(item.doc_type, false)"
+                            class="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-500 text-[10px] transition"
+                            title="Đã xác nhận thủ công - Bấm để quay về đối chiếu tự động"
+                          >
+                            ↺ Tự động
+                          </button>
+                        </div>
                       </div>
-
-                      <span
-                        x-show="item.doc_type === 'MANIFEST'"
-                        class="font-mono-code font-medium"
-                        :class="item.status === 'COMPLETED' ? 'text-slate-800' : 'text-slate-400'"
-                        x-text="item.status === 'COMPLETED' ? ((item.expected_count || 0) + ' B/L') : '0 B/L'"
-                      ></span>
-
-                      <span
-                        x-show="item.requires_count_match === 0 && item.doc_type !== 'MANIFEST'"
-                        class="font-mono-code font-medium"
-                        :class="item.status === 'COMPLETED' ? 'text-emerald-700' : 'text-slate-400'"
-                        x-text="item.status === 'COMPLETED' ? '1/1' : '0/1'"
-                      ></span>
                     </td>
                   </tr>
                 </template>
@@ -783,10 +1037,10 @@
     </div>
 
     <!-- ========================================================================= -->
-    <!-- VIEW 3A: QUẢN LÝ USER (ADMIN ONLY)                                        -->
+    <!-- VIEW 3A: QUẢN LÝ USER & GOOGLE DRIVE CLOUD (ADMIN ONLY)                   -->
     <!-- ========================================================================= -->
     <div x-show="activeTab === 'users' && currentUser?.role === 'ADMIN'" class="flex-1 p-6 overflow-y-auto">
-      <div class="max-w-5xl mx-auto space-y-4">
+      <div class="max-w-5xl mx-auto space-y-5">
         <div class="flex items-center justify-between">
           <div>
             <h2 class="text-sm font-bold text-slate-900">Quản lý Tài khoản & Phân quyền (RBAC)</h2>
@@ -851,12 +1105,13 @@
             </tbody>
           </table>
         </div>
-        <!-- GOOGLE DRIVE STATELESS CLOUD BRIDGE (ADMIN ONLY) -->
+
+        <!-- GOOGLE DRIVE STATELESS CLOUD BRIDGE (ADMIN ONLY - SECRET KEY HIDDEN) -->
         <div class="bg-white rounded-xl enterprise-border p-5 space-y-4">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div class="flex items-center gap-2">
-                <h3 class="text-sm font-bold text-slate-900">Google Drive Cloud Bridge (Stateless Storage & DB Backup)</h3>
+                <h3 class="text-sm font-bold text-slate-900">Google Drive 2-Way Cloud Sync</h3>
                 <span
                   class="px-2 py-0.5 rounded text-[10px] font-mono-code font-semibold border"
                   :class="gdriveStatus.enabled ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'"
@@ -864,7 +1119,8 @@
                 ></span>
               </div>
               <p class="text-xs text-slate-500 mt-0.5">
-                Tự động đồng bộ Database (<span class="font-mono-code">port_checklist_backup.db</span>) và lưu chứng từ chuẩn hóa vào thư mục <span class="font-mono-code">PortCall_Checklist_Storage</span>
+                Thư mục chứng từ: <span class="font-mono-code">PortCall_Checklist_Storage</span> ·
+                Thư mục sao lưu DB hệ thống (ẩn riêng biệt): <span class="font-mono-code">.PortCall_System_DB_DoNotDelete</span>
               </p>
             </div>
 
@@ -892,27 +1148,19 @@
                 :disabled="isLoading || !gdriveStatus.enabled"
                 class="h-8 px-3 rounded-lg enterprise-border bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-medium text-slate-700 transition"
               >
-                Tải DB từ Drive về
+                Khôi phục DB từ Drive
               </button>
             </div>
           </div>
 
+          <!-- Form chỉ hiển thị GDRIVE_BRIDGE_URL, ẩn hoàn toàn BRIDGE_SECRET_KEY -->
           <form @submit.prevent="saveGdriveConfig()" class="grid grid-cols-1 md:grid-cols-12 gap-3 pt-2 border-t border-[#E2E8F0] text-xs">
-            <div class="md:col-span-6">
+            <div class="md:col-span-10">
               <label class="block font-medium text-slate-700 mb-1">Google Apps Script Web App URL (<span class="font-mono-code">GDRIVE_BRIDGE_URL</span>)</label>
               <input
                 type="url"
                 x-model="gdriveForm.bridge_url"
                 placeholder="https://script.google.com/macros/s/.../exec"
-                class="w-full h-8 px-2.5 rounded-md enterprise-border font-mono-code text-xs focus:outline-none focus:border-slate-900"
-              />
-            </div>
-            <div class="md:col-span-4">
-              <label class="block font-medium text-slate-700 mb-1">Khóa bảo mật (<span class="font-mono-code">BRIDGE_SECRET_KEY</span>)</label>
-              <input
-                type="text"
-                x-model="gdriveForm.secret_key"
-                placeholder="PORTCALL_SECRET_2026"
                 class="w-full h-8 px-2.5 rounded-md enterprise-border font-mono-code text-xs focus:outline-none focus:border-slate-900"
               />
             </div>
@@ -999,7 +1247,7 @@
   </div>
 
   <!-- ========================================================================= -->
-  <!-- MODAL: TẠO LỊCH TÀU HÀNG LOẠT (CHỈ CẦN TÊN TÀU, LOẠI TÀU, NGÀY GIỜ ETA)    -->
+  <!-- MODAL: TẠO LỊCH TÀU HÀNG LOẠT (Ô DATETIME-LOCAL RỘNG RÃI, KHÔNG CẮT CHỮ)   -->
   <!-- ========================================================================= -->
   <div
     x-cloak
@@ -1008,16 +1256,16 @@
   >
     <div
       @click.away="showBatchModal = false"
-      class="bg-white rounded-xl enterprise-border shadow-xl max-w-xl w-full overflow-hidden"
+      class="bg-white rounded-xl enterprise-border shadow-xl max-w-2xl w-full overflow-hidden"
     >
       <div class="px-5 py-3.5 border-b border-[#E2E8F0] flex items-center justify-between">
-        <h3 class="text-sm font-bold text-slate-900">Tạo lịch tàu</h3>
+        <h3 class="text-sm font-bold text-slate-900">Tạo lịch tàu cập cảng</h3>
         <button type="button" @click="showBatchModal = false" class="text-slate-400 hover:text-slate-700 text-xs">✕</button>
       </div>
 
       <div class="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
         <div class="flex items-center justify-between">
-          <span class="text-xs text-slate-500">Nhập Tên tàu, Loại tàu và Giờ dự kiến cập cảng (ETA)</span>
+          <span class="text-xs text-slate-500">Nhập Tên tàu, Loại tàu và chọn Ngày giờ dự kiến cập cảng (ETA)</span>
           <div class="flex items-center gap-2">
             <button
               type="button"
@@ -1037,31 +1285,30 @@
         </div>
 
         <template x-for="(row, index) in batchRows" :key="index">
-          <div class="grid grid-cols-12 gap-2 items-center">
-            <div class="col-span-5">
+          <div class="grid grid-cols-12 gap-2.5 items-center">
+            <div class="col-span-4">
               <input
                 type="text"
                 x-model="row.vessel_name"
                 placeholder="Tên tàu (VD: MV PACIFIC)"
-                class="w-full h-8 px-2.5 rounded-md enterprise-border text-xs uppercase font-medium focus:outline-none focus:border-slate-900"
+                class="w-full h-9 px-2.5 rounded-md enterprise-border text-xs uppercase font-medium focus:outline-none focus:border-slate-900"
               />
             </div>
             <div class="col-span-3">
               <select
                 x-model="row.vessel_type"
-                class="w-full h-8 px-2 rounded-md enterprise-border text-xs bg-white focus:outline-none focus:border-slate-900"
+                class="w-full h-9 px-2 rounded-md enterprise-border text-xs bg-white focus:outline-none focus:border-slate-900"
               >
                 <option value="CONTAINER_INTL">Container Quốc tế</option>
                 <option value="BULK">Tàu Hàng rời</option>
                 <option value="DOMESTIC">Tàu Nội địa</option>
               </select>
             </div>
-            <div class="col-span-3">
+            <div class="col-span-4">
               <input
-                type="text"
+                type="datetime-local"
                 x-model="row.eta"
-                placeholder="YYYY-MM-DD HH:mm"
-                class="w-full h-8 px-2.5 rounded-md enterprise-border text-xs font-mono-code focus:outline-none focus:border-slate-900"
+                class="w-full h-9 px-2.5 rounded-md enterprise-border text-xs font-mono-code focus:outline-none focus:border-slate-900"
               />
             </div>
             <div class="col-span-1 text-right">
@@ -1095,6 +1342,74 @@
           Tạo lịch tàu
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: CHỈNH SỬA THÔNG TIN TÀU & GIỜ CẬP CẢNG (EDIT ETA)                  -->
+  <!-- ========================================================================= -->
+  <div
+    x-cloak
+    x-show="showEditVesselModal"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4"
+  >
+    <div
+      @click.away="showEditVesselModal = false"
+      class="bg-white rounded-xl enterprise-border shadow-xl max-w-md w-full overflow-hidden"
+    >
+      <div class="px-5 py-3.5 border-b border-[#E2E8F0] flex items-center justify-between">
+        <h3 class="text-sm font-bold text-slate-900">Sửa thông tin tàu & Giờ cập cảng (ETA)</h3>
+        <button type="button" @click="showEditVesselModal = false" class="text-slate-400 hover:text-slate-700 text-xs">✕</button>
+      </div>
+
+      <form @submit.prevent="submitEditVessel()" class="p-5 space-y-3.5 text-xs">
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">Tên tàu</label>
+          <input
+            type="text"
+            x-model="editVesselForm.vessel_name"
+            required
+            class="w-full h-9 px-3 rounded-md enterprise-border uppercase font-semibold focus:outline-none focus:border-slate-900"
+          />
+        </div>
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">Loại tàu</label>
+          <select
+            x-model="editVesselForm.vessel_type"
+            class="w-full h-9 px-2.5 rounded-md enterprise-border bg-white focus:outline-none focus:border-slate-900"
+          >
+            <option value="CONTAINER_INTL">Tàu Container Quốc tế</option>
+            <option value="BULK">Tàu Hàng rời (Bulk Carrier)</option>
+            <option value="DOMESTIC">Tàu Nội địa</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">Giờ dự kiến cập cảng (ETA)</label>
+          <input
+            type="datetime-local"
+            x-model="editVesselForm.eta"
+            required
+            class="w-full h-9 px-3 rounded-md enterprise-border font-mono-code focus:outline-none focus:border-slate-900"
+          />
+        </div>
+
+        <div class="pt-2 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            @click="showEditVesselModal = false"
+            class="h-8 px-3 rounded-md enterprise-border bg-white text-slate-600 hover:bg-slate-50"
+          >
+            Hủy
+          </button>
+          <button
+            type="submit"
+            :disabled="isLoading"
+            class="h-8 px-3.5 rounded-md bg-slate-900 hover:bg-slate-800 text-white font-medium"
+          >
+            Lưu thay đổi
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -1195,14 +1510,29 @@
         selectedVesselId: null,
         filterColor: 'ALL',
 
+        // Sorting state for Vessel list
+        sortBy: 'ETA', // 'ETA' | 'STATUS' | 'NAME'
+        sortDir: 'asc', // 'asc' | 'desc'
+
+        // UI Modals & Menus
         showDemoMenu: false,
+        showExportMenu: false,
         showBatchModal: false,
+        showEditVesselModal: false,
         showCreateUserModal: false,
         isDraggingOverMain: false,
         dragOverVesselId: null,
         isLoading: false,
+        isSyncingDrive: false,
+
+        // Upload & Multi-select state
+        replaceOnUpload: false,
+        recentConflicts: [],
+        selectedFileIds: [],
+        stagedDocTypes: {},
 
         batchRows: [],
+        editVesselForm: { id: null, vessel_name: '', vessel_type: 'CONTAINER_INTL', eta: '' },
         usersList: [],
         auditLogs: [],
         newUserForm: { username: '', full_name: '', password: '', role: 'OPS' },
@@ -1214,7 +1544,7 @@
           last_sync_at: null,
           last_sync_error: null
         },
-        gdriveForm: { bridge_url: '', secret_key: 'PORTCALL_SECRET_2026' },
+        gdriveForm: { bridge_url: '' },
         toast: { visible: false, message: '', type: 'info', timer: null },
 
         get selectedVessel() {
@@ -1226,14 +1556,23 @@
         },
 
         statusLabel(color) {
-          if (color === 'GREEN') return 'Đủ hồ sơ';
-          if (color === 'ORANGE') return 'Thiếu chứng từ';
-          return 'Cần xử lý';
+          if (color === 'GREEN') return '✓ Đủ hồ sơ';
+          if (color === 'ORANGE') return '— Thiếu chứng từ';
+          return '✕ Cần xử lý';
         },
 
         formatShortTime(ts) {
           if (!ts) return '';
           return ts.length > 10 ? ts.slice(11, 16) : ts;
+        },
+
+        toDatetimeLocalValue(etaStr) {
+          if (!etaStr) {
+            const today = new Date().toISOString().slice(0, 10);
+            return `${today}T14:00`;
+          }
+          const clean = etaStr.trim().replace(' ', 'T');
+          return clean.slice(0, 16);
         },
 
         showToast(message, type = 'info') {
@@ -1243,7 +1582,7 @@
           this.toast.visible = true;
           this.toast.timer = setTimeout(() => {
             this.toast.visible = false;
-          }, 4000);
+          }, 4200);
         },
 
         async init() {
@@ -1326,6 +1665,7 @@
           this.vessels = [];
           this.usersList = [];
           this.auditLogs = [];
+          this.selectedFileIds = [];
         },
 
         async switchTab(tab) {
@@ -1350,6 +1690,7 @@
             this.sampleFiles = data.sample_files || [];
             if (data.gdrive) {
               this.gdriveStatus = data.gdrive;
+              this.gdriveForm.bridge_url = data.gdrive.bridge_url || '';
             }
           }
         },
@@ -1359,15 +1700,12 @@
             const res = await fetch('/api/gdrive/status', { credentials: 'same-origin' });
             if (res.ok) {
               this.gdriveStatus = await res.json();
+              this.gdriveForm.bridge_url = this.gdriveStatus.bridge_url || '';
             }
           } catch (e) {}
         },
 
         async saveGdriveConfig() {
-          if (!this.gdriveForm.bridge_url) {
-            this.showToast('Vui lòng nhập URL Google Apps Script Web App.', 'warning');
-            return;
-          }
           this.isLoading = true;
           try {
             const res = await fetch('/api/admin/gdrive-config', {
@@ -1375,14 +1713,13 @@
               credentials: 'same-origin',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                bridge_url: this.gdriveForm.bridge_url.trim(),
-                secret_key: this.gdriveForm.secret_key.trim() || 'PORTCALL_SECRET_2026'
+                bridge_url: (this.gdriveForm.bridge_url || '').trim()
               })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || 'Lỗi lưu cấu hình Google Drive Bridge');
             if (data.gdrive) this.gdriveStatus = data.gdrive;
-            this.showToast(data.message, data.ping?.status === 'ok' ? 'success' : 'warning');
+            this.showToast(data.message, 'success');
           } catch (err) {
             this.showToast(err.message, 'error');
           } finally {
@@ -1421,25 +1758,93 @@
             const data = await res.json();
             this.vessels = data.vessels || [];
             this.stats = data.stats || { total: 0, red: 0, orange: 0, green: 0, total_files: 0 };
+            if (data.gdrive_status) {
+              this.gdriveStatus = data.gdrive_status;
+            }
             if (!keepSelected || !this.selectedVesselId || !this.vessels.some(v => v.id === this.selectedVesselId)) {
-              this.selectedVesselId = this.vessels.length > 0 ? this.vessels[0].id : null;
+              const sorted = this.sortedFilteredVessels();
+              this.selectedVesselId = sorted.length > 0 ? sorted[0].id : (this.vessels[0]?.id || null);
             }
           }
         },
 
-        filteredVessels() {
-          if (this.filterColor === 'ALL') return this.vessels;
-          return this.vessels.filter(v => v.status_color === this.filterColor);
+        sortedFilteredVessels() {
+          let list = this.filterColor === 'ALL'
+            ? [...this.vessels]
+            : this.vessels.filter(v => v.status_color === this.filterColor);
+
+          const statusWeight = { RED: 1, ORANGE: 2, GREEN: 3 };
+          const dir = this.sortDir === 'asc' ? 1 : -1;
+
+          list.sort((a, b) => {
+            if (this.sortBy === 'ETA') {
+              const ea = (a.eta || '').replace('T', ' ');
+              const eb = (b.eta || '').replace('T', ' ');
+              return ea.localeCompare(eb) * dir;
+            }
+            if (this.sortBy === 'STATUS') {
+              const sa = statusWeight[a.status_color] || 9;
+              const sb = statusWeight[b.status_color] || 9;
+              if (sa !== sb) return (sa - sb) * dir;
+              return (a.eta || '').localeCompare(b.eta || '');
+            }
+            // 'NAME'
+            return (a.vessel_name || '').localeCompare(b.vessel_name || '', 'vi') * dir;
+          });
+          return list;
         },
 
         selectVessel(id) {
           this.selectedVesselId = id;
+          this.selectedFileIds = [];
+          this.recentConflicts = [];
+          if (this.gdriveStatus?.enabled) {
+            this.syncVesselFromDrive(id, true);
+          }
+        },
+
+        // ==================== EDIT VESSEL / ETA & BATCH CREATE ====================
+        openEditVesselModal() {
+          if (!this.selectedVessel) return;
+          this.editVesselForm = {
+            id: this.selectedVessel.id,
+            vessel_name: this.selectedVessel.vessel_name,
+            vessel_type: this.selectedVessel.vessel_type,
+            eta: this.toDatetimeLocalValue(this.selectedVessel.eta)
+          };
+          this.showEditVesselModal = true;
+        },
+
+        async submitEditVessel() {
+          if (!this.editVesselForm.id) return;
+          this.isLoading = true;
+          try {
+            const res = await fetch(`/api/vessels/${this.editVesselForm.id}`, {
+              method: 'PUT',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                vessel_name: this.editVesselForm.vessel_name.trim(),
+                vessel_type: this.editVesselForm.vessel_type,
+                eta: this.editVesselForm.eta.replace('T', ' ')
+              })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Không thể cập nhật thông tin tàu');
+            this.showEditVesselModal = false;
+            await this.loadVessels(true);
+            this.showToast(data.message, 'success');
+          } catch (err) {
+            this.showToast(err.message, 'error');
+          } finally {
+            this.isLoading = false;
+          }
         },
 
         openBatchCreateModal() {
           const today = new Date().toISOString().slice(0, 10);
           this.batchRows = [
-            { vessel_name: '', vessel_type: 'CONTAINER_INTL', eta: `${today} 16:30` }
+            { vessel_name: '', vessel_type: 'CONTAINER_INTL', eta: `${today}T16:30` }
           ];
           this.showBatchModal = true;
         },
@@ -1449,7 +1854,7 @@
           this.batchRows.push({
             vessel_name: '',
             vessel_type: 'BULK',
-            eta: `${today} 18:00`
+            eta: `${today}T18:00`
           });
         },
 
@@ -1460,13 +1865,18 @@
         fillSampleBatchRows() {
           const today = new Date().toISOString().slice(0, 10);
           this.batchRows = [
-            { vessel_name: 'MV PACIFIC STAR', vessel_type: 'BULK', eta: `${today} 15:30` },
-            { vessel_name: 'MV SAIGON EXPRESS', vessel_type: 'CONTAINER_INTL', eta: `${today} 19:00` }
+            { vessel_name: 'MV PACIFIC STAR', vessel_type: 'BULK', eta: `${today}T15:30` },
+            { vessel_name: 'MV SAIGON EXPRESS', vessel_type: 'CONTAINER_INTL', eta: `${today}T19:00` }
           ];
         },
 
         async submitBatchCreate() {
-          const validRows = this.batchRows.filter(r => r.vessel_name && r.vessel_name.trim() !== '');
+          const validRows = this.batchRows
+            .filter(r => r.vessel_name && r.vessel_name.trim() !== '')
+            .map(r => ({
+              ...r,
+              eta: (r.eta || '').replace('T', ' ')
+            }));
           if (validRows.length === 0) {
             this.showToast('Vui lòng nhập tên tàu.', 'warning');
             return;
@@ -1494,6 +1904,7 @@
           }
         },
 
+        // ==================== UPLOAD, OVERWRITE & MANUAL VERIFY ====================
         async handleFileSelect(event) {
           const files = event.target.files;
           if (files && files.length > 0 && this.selectedVessel) {
@@ -1524,6 +1935,7 @@
           for (let i = 0; i < fileList.length; i++) {
             formData.append('files', fileList[i]);
           }
+          formData.append('replace_existing', this.replaceOnUpload ? 'true' : 'false');
           this.isLoading = true;
           try {
             const res = await fetch(`/api/vessels/${vesselId}/upload`, {
@@ -1533,6 +1945,9 @@
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || 'Lỗi tải chứng từ');
+            if (data.conflicts && data.conflicts.length > 0) {
+              this.recentConflicts = data.conflicts;
+            }
             await this.loadVessels(true);
             this.notifyAfterUpload(data);
           } catch (err) {
@@ -1550,16 +1965,190 @@
               method: 'POST',
               credentials: 'same-origin',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ filenames })
+              body: JSON.stringify({
+                filenames,
+                replace_existing: this.replaceOnUpload
+              })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || 'Lỗi nạp file mẫu');
+            if (data.conflicts && data.conflicts.length > 0) {
+              this.recentConflicts = data.conflicts;
+            }
             await this.loadVessels(true);
             this.notifyAfterUpload(data);
           } catch (err) {
             this.showToast(err.message, 'error');
           } finally {
             this.isLoading = false;
+          }
+        },
+
+        async replaceExistingFile(fileId) {
+          this.isLoading = true;
+          try {
+            const res = await fetch(`/api/files/${fileId}/replace-existing`, {
+              method: 'POST',
+              credentials: 'same-origin'
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Lỗi ghi đè chứng từ');
+            this.recentConflicts = this.recentConflicts.filter(c => c.file_id !== fileId);
+            await this.loadVessels(true);
+            this.showToast(data.message, 'success');
+          } catch (err) {
+            this.showToast(err.message, 'error');
+          } finally {
+            this.isLoading = false;
+          }
+        },
+
+        dismissConflict(fileId) {
+          this.recentConflicts = this.recentConflicts.filter(c => c.file_id !== fileId);
+        },
+
+        async verifyChecklistItem(docType, verified = true) {
+          if (!this.selectedVessel) return;
+          this.isLoading = true;
+          try {
+            const res = await fetch(`/api/vessels/${this.selectedVessel.id}/checklist/${docType}/verify`, {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ verified })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Không thể cập nhật trạng thái xác nhận');
+            await this.loadVessels(true);
+            this.showToast(data.message, 'success');
+          } catch (err) {
+            this.showToast(err.message, 'error');
+          } finally {
+            this.isLoading = false;
+          }
+        },
+
+        async confirmStagedFile(fileId, docType) {
+          if (!docType) return;
+          this.isLoading = true;
+          try {
+            const res = await fetch(`/api/files/${fileId}/classify`, {
+              method: 'PUT',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                doc_type: docType,
+                confirm_override: true,
+                replace_existing: this.replaceOnUpload,
+                mark_checklist_completed: true
+              })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Lỗi xác nhận chứng từ');
+            this.selectedFileIds = this.selectedFileIds.filter(id => id !== fileId);
+            await this.loadVessels(true);
+            this.showToast(data.message, 'success');
+          } catch (err) {
+            this.showToast(err.message, 'error');
+          } finally {
+            this.isLoading = false;
+          }
+        },
+
+        // ==================== MULTI-SELECT / BATCH ACTIONS ====================
+        getAllVesselFileIds() {
+          if (!this.selectedVessel || !this.selectedVessel.files) return [];
+          return this.selectedVessel.files.map(f => f.id);
+        },
+
+        isAllFilesSelected() {
+          const allIds = this.getAllVesselFileIds();
+          return allIds.length > 0 && allIds.every(id => this.selectedFileIds.includes(id));
+        },
+
+        toggleSelectAllFiles() {
+          const allIds = this.getAllVesselFileIds();
+          if (this.isAllFilesSelected()) {
+            this.selectedFileIds = [];
+          } else {
+            this.selectedFileIds = [...allIds];
+          }
+        },
+
+        toggleFileSelection(fileId) {
+          if (this.selectedFileIds.includes(fileId)) {
+            this.selectedFileIds = this.selectedFileIds.filter(id => id !== fileId);
+          } else {
+            this.selectedFileIds.push(fileId);
+          }
+        },
+
+        async batchDeleteSelectedFiles() {
+          if (this.selectedFileIds.length === 0) return;
+          this.isLoading = true;
+          try {
+            const res = await fetch('/api/files/batch-delete', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ file_ids: this.selectedFileIds })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Lỗi gỡ hàng loạt');
+            this.selectedFileIds = [];
+            await this.loadVessels(true);
+            this.showToast(data.message, 'info');
+          } catch (err) {
+            this.showToast(err.message, 'error');
+          } finally {
+            this.isLoading = false;
+          }
+        },
+
+        async batchConfirmSelectedFiles() {
+          if (this.selectedFileIds.length === 0) return;
+          this.isLoading = true;
+          try {
+            const res = await fetch('/api/files/batch-confirm', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ file_ids: this.selectedFileIds })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Lỗi xác nhận hàng loạt');
+            this.selectedFileIds = [];
+            await this.loadVessels(true);
+            this.showToast(data.message, 'success');
+          } catch (err) {
+            this.showToast(err.message, 'error');
+          } finally {
+            this.isLoading = false;
+          }
+        },
+
+        // ==================== 2-WAY GOOGLE DRIVE FOLDER SYNC ====================
+        async syncVesselFromDrive(vesselId, silent = false) {
+          if (!vesselId) return;
+          this.isSyncingDrive = true;
+          try {
+            const res = await fetch(`/api/vessels/${vesselId}/sync-drive`, {
+              method: 'POST',
+              credentials: 'same-origin'
+            });
+            const data = await res.json();
+            if (!res.ok) {
+              if (!silent) throw new Error(data.detail || 'Lỗi đồng bộ Google Drive');
+              return;
+            }
+            await this.loadVessels(true);
+            if (!silent || (data.new_from_drive && data.new_from_drive > 0)) {
+              this.showToast(data.message, 'success');
+            }
+          } catch (err) {
+            if (!silent) this.showToast(err.message, 'error');
+          } finally {
+            this.isSyncingDrive = false;
           }
         },
 
@@ -1588,35 +2177,17 @@
 
         notifyAfterUpload(data) {
           const wrongFiles = (data.processed_files || []).filter(f => f.is_wrong_vessel === 1);
+          const unclassFiles = (data.processed_files || []).filter(f => f.doc_type === 'UNCLASSIFIED');
           if (wrongFiles.length > 0) {
-            this.showToast(wrongFiles[0].error_message, 'error');
+            this.showToast(`${wrongFiles[0].error_message} (Đã chặn lưu lên Drive, chờ xác nhận)`, 'error');
+          } else if (unclassFiles.length > 0) {
+            this.showToast('Có file chưa rõ loại chứng từ (Đã giữ tạm, chọn loại để xác nhận & lưu Drive)', 'warning');
           } else if (data.vessel?.status_color === 'GREEN') {
-            this.showToast(`Đủ hồ sơ: ${data.vessel.vessel_name}`, 'success');
+            this.showToast(`✓ Đạt đủ hồ sơ: ${data.vessel.vessel_name}`, 'success');
           } else if (data.vessel?.status_color === 'ORANGE') {
             this.showToast(`${data.message} (${data.vessel.status_summary})`, 'warning');
           } else {
             this.showToast(data.message, 'info');
-          }
-        },
-
-        async classifyFileOneClick(fileId, newDocType) {
-          if (!newDocType) return;
-          this.isLoading = true;
-          try {
-            const res = await fetch(`/api/files/${fileId}/classify`, {
-              method: 'PUT',
-              credentials: 'same-origin',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ doc_type: newDocType })
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.detail || 'Lỗi phân loại');
-            await this.loadVessels(true);
-            this.showToast(data.message, 'success');
-          } catch (err) {
-            this.showToast(err.message, 'error');
-          } finally {
-            this.isLoading = false;
           }
         },
 
@@ -1629,6 +2200,7 @@
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || 'Lỗi gỡ chứng từ');
+            this.selectedFileIds = this.selectedFileIds.filter(id => id !== fileId);
             await this.loadVessels(true);
             this.showToast(data.message, 'info');
           } catch (err) {
@@ -1647,6 +2219,8 @@
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || 'Lỗi làm trống');
+            this.selectedFileIds = [];
+            this.recentConflicts = [];
             await this.loadVessels(true);
             if (!silent) this.showToast(data.message, 'info');
           } catch (err) {
@@ -1665,6 +2239,7 @@
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || 'Lỗi xóa tàu');
+            this.selectedFileIds = [];
             await this.loadVessels(false);
             this.showToast(data.message, 'info');
           } catch (err) {
@@ -1683,6 +2258,8 @@
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || 'Lỗi khôi phục');
+            this.selectedFileIds = [];
+            this.recentConflicts = [];
             await this.loadVessels(false);
             this.showToast(data.message, 'success');
           } catch (err) {
